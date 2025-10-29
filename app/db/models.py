@@ -1,12 +1,14 @@
 from sqlalchemy import Column, String, Boolean, DateTime, func, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
 from app.db.database import Base
 
+def gen_uuid_str():
+    return str(uuid.uuid4())
+
 class User(Base):
     __tablename__ = "users"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String, primary_key=True, default=gen_uuid_str)     # <-- String
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     language = Column(String, default="en")
@@ -16,8 +18,8 @@ class User(Base):
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    id = Column(String, primary_key=True, default=gen_uuid_str)      # <-- String
+    user_id = Column(String, ForeignKey("users.id"))                 # <-- String FK
     league = Column(String, nullable=False)
     team = Column(String, nullable=True)
     frequency = Column(String, default="weekly")

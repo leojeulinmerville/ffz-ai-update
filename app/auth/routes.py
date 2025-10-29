@@ -4,6 +4,7 @@ from app.db.database import AsyncSessionLocal
 from app.db import models
 from app.auth.security import hash_password, verify_password, create_jwt_token
 from pydantic import BaseModel, EmailStr
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
@@ -36,4 +37,17 @@ async def login_user(data: LoginSchema, db: AsyncSession = Depends(get_db)):
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token = create_jwt_token(user.id)
-    return {"access_token": token, "token_type": "bearer"}
+    response = JSONResponse(
+    content={"access_token": token, "token_type": "bearer"}
+)
+# Pour Swagger UI (il lira automatiquement ce header)
+    response.headers["Authorization"] = f"Bearer {token}"
+    return response
+
+from app.auth.security import get_current_user
+
+@router.get("/me")
+async def me(user = Depends(get_current_user)):
+    return {"id": str(user.id), "email": user.email, "language": user.language, "is_active": user.is_active}
+
+
