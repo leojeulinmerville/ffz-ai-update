@@ -48,3 +48,8 @@ def custom_openapi():
     return app.openapi_schema
 
 app.openapi = custom_openapi
+
+from app.news.scheduler import router as news_router, start_scheduler
+
+app.include_router(news_router)
+start_scheduler()
