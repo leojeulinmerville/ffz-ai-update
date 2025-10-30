@@ -1,24 +1,19 @@
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import pool, create_engine
 from alembic import context
-import os
-import asyncio
+from app.db.database import Base
+import app.db.models  # noqa
+from app.config import DATABASE_URL
 
-# Config Alembic
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import des modèles
-import app.db.models as models  # noqa
-from app.db.database import Base  # noqa
-
 target_metadata = Base.metadata
 
 def run_migrations_offline():
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=DATABASE_URL.replace("+aiosqlite", ""),  # alembic veut le driver sync
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -26,19 +21,14 @@ def run_migrations_offline():
     with context.begin_transaction():
         context.run_migrations()
 
-def do_run_migrations(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
-    with context.begin_transaction():
-        context.run_migrations()
-
 def run_migrations_online():
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
-        prefix="",
-        poolclass=pool.NullPool,
+    connectable = create_engine(
+        DATABASE_URL.replace("+aiosqlite", ""), poolclass=pool.NullPool
     )
     with connectable.connect() as connection:
-        do_run_migrations(connection)
+        context.configure(connection=connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
 
 if context.is_offline_mode():
     run_migrations_offline()
