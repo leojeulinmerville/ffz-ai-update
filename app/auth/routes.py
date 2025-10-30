@@ -16,6 +16,7 @@ class RegisterSchema(BaseModel):
     email: EmailStr
     password: str
     language: str = "en"
+    favorite_team: str | None = None
 
 class LoginSchema(BaseModel):
     email: EmailStr
@@ -23,7 +24,12 @@ class LoginSchema(BaseModel):
 
 @router.post("/register")
 async def register_user(data: RegisterSchema, db: AsyncSession = Depends(get_db)):
-    user = models.User(email=data.email, password_hash=hash_password(data.password), language=data.language)
+    user = models.User(
+        email=data.email,
+        password_hash=hash_password(data.password),
+        language=data.language,
+        favorite_team=data.favorite_team,
+    )
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -48,6 +54,12 @@ from app.auth.security import get_current_user
 
 @router.get("/me")
 async def me(user = Depends(get_current_user)):
-    return {"id": str(user.id), "email": user.email, "language": user.language, "is_active": user.is_active}
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "language": user.language,
+        "favorite_team": user.favorite_team,
+        "is_active": user.is_active,
+    }
 
 

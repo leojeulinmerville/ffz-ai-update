@@ -6,6 +6,8 @@ from app.db.database import init_db
 from app.auth.routes import router as auth_router
 from app.api.subscriptions import router as subs_router
 from app.api.news import router as news_router
+from app.api.meta import router as meta_router
+from app.api.admin_page import router as admin_router
 
 # NEW: scheduler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -40,6 +42,8 @@ async def shutdown_event():
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(subs_router, tags=["subscriptions"])
 app.include_router(news_router, tags=["news"])
+app.include_router(meta_router, tags=["meta"])
+app.include_router(admin_router, tags=["admin"])
 
 @app.get("/")
 async def root():

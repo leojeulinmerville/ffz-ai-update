@@ -38,6 +38,9 @@ app.dependency_overrides[get_db_prod] = get_test_db
 from app.api.subscriptions import get_db as get_db_subs
 app.dependency_overrides[get_db_subs] = get_test_db
 
+from app.auth.security import get_db as get_db_security
+app.dependency_overrides[get_db_security] = get_test_db
+
 @pytest.fixture
 def client():
     return TestClient(app)
