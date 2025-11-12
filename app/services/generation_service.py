@@ -1,7 +1,7 @@
 import json
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import models
+from app.models.weekly_report import WeeklyReport
 from app.services.report_builder import build_user_weekly_report
 
 
@@ -13,7 +13,7 @@ async def generate_and_store_weekly_report(user_id: str, db: AsyncSession):
     """
     report_dict = await build_user_weekly_report(user_id, db)
 
-    db_obj = models.WeeklyReport(
+    db_obj = WeeklyReport(
         user_id=user_id,
         language=report_dict["user"]["language"],
         payload=json.dumps(report_dict, ensure_ascii=False),

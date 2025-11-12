@@ -3,8 +3,9 @@ from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.db.database import AsyncSessionLocal
-from app.db import models
+
+from app.models.db import AsyncSessionLocal
+from app.models.user import User
 
 SECRET_KEY = os.getenv("SECRET_KEY", "devsecret")
 ALGORITHM = "HS256"
@@ -46,7 +47,7 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

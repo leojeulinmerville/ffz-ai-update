@@ -7,8 +7,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.db import models
-from app.db.database import AsyncSessionLocal
+from app.models.db import AsyncSessionLocal
+from app.models.user import User
 from app.services.generation_service import generate_and_store_weekly_report
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ async def run_weekly_job_once(db: AsyncSession):
     Generate and persist a fresh weekly report for each active user.
     """
     res_users = await db.execute(
-        select(models.User).where(models.User.is_active == True)  # noqa: E712
+        select(User).where(User.is_active == True)  # noqa: E712
     )
     users = res_users.scalars().all()
 

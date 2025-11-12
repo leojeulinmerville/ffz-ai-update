@@ -1,291 +1,196 @@
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
-router = APIRouter(tags=["admin"])
+router = APIRouter(prefix="/admin", tags=["admin"])
 
 ADMIN_HTML = """<!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8" />
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FFZ Admin Console</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" />
     <style>
-        body { font-family: Arial, sans-serif; margin: 24px; line-height: 1.4; }
-        h2 { margin-top: 32px; }
-        fieldset { margin-bottom: 16px; padding: 16px; }
-        button { margin-top: 8px; }
-        pre { background: #f3f3f3; padding: 12px; overflow-x: auto; max-height: 320px; }
-        .status { margin: 12px 0; font-weight: bold; }
-        .league-card { border: 1px solid #ddd; padding: 12px; margin: 8px 0; }
-        .league-card input { margin-top: 4px; display: block; }
+      body {
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        background: #f4f6fb;
+        margin: 0;
+        padding: 24px;
+        color: #1f2933;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 24px;
+        color: #111827;
+      }
+      .status {
+        text-align: center;
+        margin-bottom: 24px;
+        padding: 8px 16px;
+        display: inline-block;
+        background: #eef2ff;
+        border-radius: 999px;
+        color: #4338ca;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 20px;
+      }
+      .hint {
+        text-align: center;
+        margin: -8px 0 24px;
+        color: #6b7280;
+        font-size: 0.9rem;
+      }
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: #111827;
+        color: #f9fafb;
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.2);
+        opacity: 0;
+        transform: translateY(20px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        pointer-events: none;
+      }
+      .toast.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      fieldset {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 20px;
+      }
+      legend {
+        font-weight: 600;
+        padding: 0 8px;
+      }
+      label {
+        display: block;
+        margin: 12px 0 4px;
+        font-size: 0.95rem;
+        font-weight: 500;
+      }
+      input, select, button, textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-family: inherit;
+      }
+      select[multiple] {
+        min-height: 160px;
+      }
+      button {
+        margin-top: 12px;
+        background: #4f46e5;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      button:hover {
+        background: #4338ca;
+      }
+      pre {
+        background: #0f172a;
+        color: #f8fafc;
+        padding: 12px;
+        border-radius: 8px;
+        max-height: 260px;
+        overflow: auto;
+        font-size: 0.85rem;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Football Fan Zone — Admin Console</h1>
-    <p class="status" id="status">Not logged in</p>
+    <div class="status" id="status">Not logged in</div>
+    <p class="hint">Tip: use "Scrape now (preview)" to inspect live BBC facts before generating.</p>
 
-    <fieldset>
+    <div class="grid">
+      <fieldset>
         <legend>Register</legend>
         <form id="register-form">
-            <label>Email <input type="email" id="register-email" required /></label><br />
-            <label>Password <input type="password" id="register-password" required /></label><br />
-            <label>Language
-                <select id="register-language">
-                    <option value="fr">French</option>
-                    <option value="en">English</option>
-                </select>
-            </label><br />
-            <label>Favourite team <input type="text" id="register-fav-team" placeholder="e.g. Paris SG" /></label><br />
-            <button type="submit">Register &amp; Login</button>
-        </form>
-    </fieldset>
+          <label>Email</label>
+          <input type="email" id="register-email" required />
 
-    <fieldset>
-        <legend>Login (existing user)</legend>
+          <label>Password</label>
+          <input type="password" id="register-password" required />
+
+          <label>Language</label>
+          <select id="register-language">
+            <option value="en" selected>English</option>
+            <option value="fr">Français</option>
+          </select>
+
+          <label>Phone (France)</label>
+          <input type="tel" id="register-phone" placeholder="0600000000" />
+
+          <label>Favorite league</label>
+          <select id="fan-league">
+            <option value="">(optional)</option>
+          </select>
+
+          <label>Favorite team</label>
+          <select id="fan-team">
+            <option value="">Select a league first</option>
+          </select>
+
+          <button type="submit">Register &amp; Login</button>
+        </form>
+      </fieldset>
+
+      <fieldset>
+        <legend>Login</legend>
         <form id="login-form">
-            <label>Email <input type="email" id="login-email" required /></label><br />
-            <label>Password <input type="password" id="login-password" required /></label><br />
-            <button type="submit">Login</button>
+          <label>Email</label>
+          <input type="email" id="login-email" required />
+
+          <label>Password</label>
+          <input type="password" id="login-password" required />
+
+          <button type="submit">Login</button>
         </form>
-    </fieldset>
 
-    <fieldset>
-        <legend>League Subscriptions</legend>
-        <button id="load-leagues">Load Leagues</button>
-        <div id="leagues-container"></div>
-    </fieldset>
+        <label>Follow leagues</label>
+        <select id="leagues" multiple></select>
+        <button id="load-leagues" type="button">Reload leagues</button>
+        <button id="follow-leagues" type="button">Follow selected</button>
+        <button id="logout" type="button">Logout</button>
+      </fieldset>
 
-    <fieldset>
-        <legend>Report Actions</legend>
-        <button id="generate-report">Generate weekly report</button>
-        <button id="show-latest">Show latest report (JSON)</button>
-        <button id="send-latest">Send latest via WhatsApp</button>
-        <div>
-            <h3>Latest report payload</h3>
-            <pre id="report-output"></pre>
-        </div>
-        <div>
-            <h3>Delivery status</h3>
-            <pre id="delivery-output"></pre>
-        </div>
-    </fieldset>
+      <fieldset>
+        <legend>Weekly Report</legend>
+        <button id="generate-report" type="button">Generate weekly report</button>
+        <button id="scrape-preview" type="button">Scrape now (preview)</button>
+        <button id="scrape-persist" type="button">Run scrape job (persist)</button>
+        <button id="show-latest" type="button">Show latest report</button>
+        <button id="send-latest" type="button">Send latest via WhatsApp</button>
 
-    <script>
-        const tokenKey = "ffz_jwt";
-        const emailKey = "ffz_email";
+        <label>Latest payload</label>
+        <pre id="report-output"></pre>
 
-        function setStatus(message) {
-            const el = document.getElementById("status");
-            el.textContent = message;
-        }
+        <label>Delivery status</label>
+        <pre id="delivery-output"></pre>
+      </fieldset>
+    </div>
 
-        function setToken(token, email) {
-            if (token) {
-                window.localStorage.setItem(tokenKey, token);
-            }
-            if (email) {
-                window.localStorage.setItem(emailKey, email);
-            }
-            const storedEmail = window.localStorage.getItem(emailKey);
-            if (storedEmail && token) {
-                setStatus(`Logged in as ${storedEmail}`);
-            }
-        }
+    <div id="toast" class="toast"></div>
 
-        function getToken() {
-            return window.localStorage.getItem(tokenKey);
-        }
-
-        function currentEmail() {
-            return window.localStorage.getItem(emailKey) || "";
-        }
-
-        function clearOutputs() {
-            document.getElementById("report-output").textContent = "";
-            document.getElementById("delivery-output").textContent = "";
-        }
-
-        async function registerUser(event) {
-            event.preventDefault();
-            clearOutputs();
-
-            const email = document.getElementById("register-email").value;
-            const password = document.getElementById("register-password").value;
-            const language = document.getElementById("register-language").value;
-            const favoriteTeam = document.getElementById("register-fav-team").value || null;
-
-            const payload = { email, password, language, favorite_team: favoriteTeam };
-            try {
-                const res = await fetch("/auth/register", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
-                if (!res.ok) {
-                    const detail = await res.text();
-                    throw new Error(detail || "Registration failed");
-                }
-                await loginUserDirect(email, password, true);
-            } catch (err) {
-                setStatus(`Registration error: ${err.message}`);
-            }
-        }
-
-        async function loginUser(event) {
-            event.preventDefault();
-            clearOutputs();
-
-            const email = document.getElementById("login-email").value;
-            const password = document.getElementById("login-password").value;
-
-            await loginUserDirect(email, password, false);
-        }
-
-        async function loginUserDirect(email, password, fromRegister) {
-            try {
-                const res = await fetch("/auth/login", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, password })
-                });
-                if (!res.ok) {
-                    const detail = await res.text();
-                    throw new Error(detail || "Login failed");
-                }
-                const payload = await res.json();
-                setToken(payload.access_token, email);
-                setStatus(`Logged in as ${email}`);
-                if (!fromRegister) {
-                    alert("Login successful!");
-                }
-            } catch (err) {
-                setStatus(`Login error: ${err.message}`);
-            }
-        }
-
-        function authHeaders() {
-            const token = getToken();
-            if (!token) {
-                throw new Error("Login first to obtain a token");
-            }
-            return { "Content-Type": "application/json", "Authorization": `Bearer ${token}` };
-        }
-
-        async function loadLeagues() {
-            clearOutputs();
-            const container = document.getElementById("leagues-container");
-            container.innerHTML = "Loading leagues...";
-            try {
-                const res = await fetch("/meta/leagues");
-                if (!res.ok) {
-                    throw new Error("Failed to load leagues");
-                }
-                const payload = await res.json();
-                container.innerHTML = "";
-                payload.leagues.forEach((league) => {
-                    const card = document.createElement("div");
-                    card.className = "league-card";
-                    card.innerHTML = `
-                        <strong>${league.name}</strong><br />
-                        Code: <code>${league.code}</code><br />
-                        Country: ${league.country}<br />
-                        <label>Track team (optional): <input type="text" placeholder="Team name" /></label>
-                        <button>Follow this league</button>
-                    `;
-                    const button = card.querySelector("button");
-                    button.addEventListener("click", async () => {
-                        const team = card.querySelector("input").value || null;
-                        try {
-                            const headers = authHeaders();
-                            const resSub = await fetch("/subscriptions", {
-                                method: "POST",
-                                headers,
-                                body: JSON.stringify({ league: league.code, team, frequency: "weekly" })
-                            });
-                            if (!resSub.ok) {
-                                const detail = await resSub.text();
-                                throw new Error(detail || "Subscription failed");
-                            }
-                            alert(`Subscribed to ${league.name}`);
-                        } catch (err) {
-                            alert(`Subscription error: ${err.message}`);
-                        }
-                    });
-                    container.appendChild(card);
-                });
-            } catch (err) {
-                container.textContent = `Error: ${err.message}`;
-            }
-        }
-
-        async function generateReport() {
-            clearOutputs();
-            try {
-                const headers = authHeaders();
-                const res = await fetch("/news/generate", { method: "POST", headers });
-                if (!res.ok) {
-                    const detail = await res.text();
-                    throw new Error(detail || "Generation failed");
-                }
-                const payload = await res.json();
-                document.getElementById("report-output").textContent = JSON.stringify(payload, null, 2);
-                alert("Report generated successfully.");
-            } catch (err) {
-                alert(`Generate error: ${err.message}`);
-            }
-        }
-
-        async function showLatestReport() {
-            clearOutputs();
-            try {
-                const headers = authHeaders();
-                const res = await fetch("/news/latest", { method: "GET", headers });
-                if (!res.ok) {
-                    const detail = await res.text();
-                    throw new Error(detail || "Fetch latest failed");
-                }
-                const payload = await res.json();
-                document.getElementById("report-output").textContent = JSON.stringify(payload, null, 2);
-            } catch (err) {
-                alert(`Latest report error: ${err.message}`);
-            }
-        }
-
-        async function sendLatestReport() {
-            document.getElementById("delivery-output").textContent = "";
-            try {
-                const headers = authHeaders();
-                const res = await fetch("/news/send_latest", { method: "POST", headers });
-                if (!res.ok) {
-                    const detail = await res.text();
-                    throw new Error(detail || "Send failed");
-                }
-                const payload = await res.json();
-                document.getElementById("delivery-output").textContent = JSON.stringify(payload, null, 2);
-            } catch (err) {
-                alert(`Send error: ${err.message}`);
-            }
-        }
-
-        document.getElementById("register-form").addEventListener("submit", registerUser);
-        document.getElementById("login-form").addEventListener("submit", loginUser);
-        document.getElementById("load-leagues").addEventListener("click", loadLeagues);
-        document.getElementById("generate-report").addEventListener("click", generateReport);
-        document.getElementById("show-latest").addEventListener("click", showLatestReport);
-        document.getElementById("send-latest").addEventListener("click", sendLatestReport);
-
-        (function init() {
-            const token = getToken();
-            const email = currentEmail();
-            if (token && email) {
-                setStatus(`Logged in as ${email}`);
-            }
-        })();
-    </script>
-</body>
+    <script src="/static/admin.js?v=6"></script>
+  </body>
 </html>
 """
 
 
-@router.get("/admin", response_class=HTMLResponse)
-async def admin_dashboard():
+@router.get("", response_class=HTMLResponse)
+async def admin_console() -> HTMLResponse:
     return HTMLResponse(content=ADMIN_HTML)

@@ -12,13 +12,22 @@ DEFAULT_TIMEOUT = 10.0
 CACHE_TTL = timedelta(hours=2)
 
 # Mapping between internal codes and football-data.org competitions.
+SUPPORTED_LEAGUES: List[Dict[str, str]] = [
+    {"code": "PL", "name": "Premier League", "country": "England"},
+    {"code": "FL1", "name": "Ligue 1", "country": "France"},
+    {"code": "PD", "name": "LaLiga", "country": "Spain"},
+    {"code": "BL1", "name": "Bundesliga", "country": "Germany"},
+    {"code": "SA", "name": "Serie A", "country": "Italy"},
+    {"code": "CL", "name": "UEFA Champions League", "country": "Europe"},
+]
+
 LEAGUE_CODE_ALIASES: Dict[str, Dict[str, str]] = {
     "FRA1": {"api_code": "FL1", "name": "Ligue 1"},
     "ENG1": {"api_code": "PL", "name": "Premier League"},
     "ITA1": {"api_code": "SA", "name": "Serie A"},
     "GER1": {"api_code": "BL1", "name": "Bundesliga"},
-    "ESP1": {"api_code": "PD", "name": "Primera Division"},
-    "SPA1": {"api_code": "PD", "name": "Primera Division"},
+    "ESP1": {"api_code": "PD", "name": "LaLiga"},
+    "SPA1": {"api_code": "PD", "name": "LaLiga"},
     "CL": {"api_code": "CL", "name": "Champions League"},
     "UCL": {"api_code": "CL", "name": "Champions League"},
 }
@@ -46,18 +55,82 @@ MOCK_LEAGUES: Dict[str, Dict[str, Any]] = {
             {"rank": 5, "team": "Aston Villa", "points": 22},
         ],
     },
+    "PD": {
+        "league_code": "PD",
+        "league_name": "LaLiga",
+        "table": [
+            {"rank": 1, "team": "Real Madrid", "points": 30},
+            {"rank": 2, "team": "FC Barcelona", "points": 28},
+            {"rank": 3, "team": "Atlético Madrid", "points": 27},
+            {"rank": 4, "team": "Real Sociedad", "points": 24},
+            {"rank": 5, "team": "Athletic Club", "points": 22},
+        ],
+    },
+    "BL1": {
+        "league_code": "BL1",
+        "league_name": "Bundesliga",
+        "table": [
+            {"rank": 1, "team": "FC Bayern München", "points": 29},
+            {"rank": 2, "team": "Bayer 04 Leverkusen", "points": 28},
+            {"rank": 3, "team": "Borussia Dortmund", "points": 25},
+            {"rank": 4, "team": "RB Leipzig", "points": 23},
+            {"rank": 5, "team": "VfB Stuttgart", "points": 21},
+        ],
+    },
+    "SA": {
+        "league_code": "SA",
+        "league_name": "Serie A",
+        "table": [
+            {"rank": 1, "team": "Inter", "points": 29},
+            {"rank": 2, "team": "Juventus", "points": 27},
+            {"rank": 3, "team": "Milan", "points": 26},
+            {"rank": 4, "team": "Napoli", "points": 23},
+            {"rank": 5, "team": "Roma", "points": 20},
+        ],
+    },
+    "CL": {
+        "league_code": "CL",
+        "league_name": "Champions League",
+        "table": [
+            {"rank": 1, "team": "Manchester City", "points": 12},
+            {"rank": 2, "team": "Real Madrid", "points": 12},
+            {"rank": 3, "team": "Bayern München", "points": 11},
+            {"rank": 4, "team": "Barcelona", "points": 10},
+            {"rank": 5, "team": "Paris SG", "points": 9},
+        ],
+    },
 }
 
 MOCK_TOP_SCORERS: Dict[str, List[Dict[str, Any]]] = {
     "FL1": [
-        {"player": "Kylian Mbappe", "team": "Paris SG", "goals": 9},
+        {"player": "Kylian Mbappé", "team": "Paris SG", "goals": 9},
         {"player": "Wissam Ben Yedder", "team": "AS Monaco", "goals": 7},
-        {"player": "Jonathan David", "team": "Lille", "goals": 6},
+        {"player": "Jonathan David", "team": "LOSC Lille", "goals": 6},
     ],
     "PL": [
         {"player": "Erling Haaland", "team": "Manchester City", "goals": 11},
         {"player": "Mohamed Salah", "team": "Liverpool", "goals": 8},
         {"player": "Bukayo Saka", "team": "Arsenal", "goals": 6},
+    ],
+    "PD": [
+        {"player": "Vinícius Júnior", "team": "Real Madrid", "goals": 10},
+        {"player": "Robert Lewandowski", "team": "FC Barcelona", "goals": 9},
+        {"player": "Álvaro Morata", "team": "Atlético Madrid", "goals": 8},
+    ],
+    "BL1": [
+        {"player": "Harry Kane", "team": "FC Bayern München", "goals": 12},
+        {"player": "Serhou Guirassy", "team": "VfB Stuttgart", "goals": 9},
+        {"player": "Donyell Malen", "team": "Borussia Dortmund", "goals": 7},
+    ],
+    "SA": [
+        {"player": "Lautaro Martínez", "team": "Inter", "goals": 11},
+        {"player": "Victor Osimhen", "team": "Napoli", "goals": 8},
+        {"player": "Paulo Dybala", "team": "Roma", "goals": 6},
+    ],
+    "CL": [
+        {"player": "Julián Álvarez", "team": "Manchester City", "goals": 5},
+        {"player": "Jude Bellingham", "team": "Real Madrid", "goals": 4},
+        {"player": "Leroy Sané", "team": "FC Bayern München", "goals": 4},
     ],
 }
 
@@ -115,14 +188,30 @@ MOCK_TEAMS: Dict[Tuple[str, str], Dict[str, Any]] = {
     },
 }
 
-_league_cache: Dict[str, Dict[str, Any]] = {}
-_team_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
+_league_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
+_team_cache: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 _league_lock: Optional[asyncio.Lock] = None
 _team_lock: Optional[asyncio.Lock] = None
 
 
 def _utcnow() -> datetime:
     return datetime.utcnow()
+
+
+def _current_bucket() -> str:
+    return _utcnow().date().isoformat()
+
+
+def list_supported_leagues() -> List[Dict[str, str]]:
+    return copy.deepcopy(SUPPORTED_LEAGUES)
+
+
+def get_mock_top_scorers(league_code: str) -> List[Dict[str, Any]]:
+    code = league_code.upper()
+    return copy.deepcopy(
+        MOCK_TOP_SCORERS.get(code) or MOCK_TOP_SCORERS.get(LEAGUE_CODE_ALIASES.get(code, {}).get("api_code", ""))
+        or []
+    )
 
 
 async def _get_league_lock() -> asyncio.Lock:
@@ -144,10 +233,12 @@ async def get_league_context(league_code: str) -> Dict[str, Any]:
     Return structured league data (standings, teams, top scorers) with caching.
     """
     normalized_code = league_code.upper()
+    bucket = _current_bucket()
+    cache_key = (normalized_code, bucket)
 
     lock = await _get_league_lock()
     async with lock:
-        cached = _league_cache.get(normalized_code)
+        cached = _league_cache.get(cache_key)
         if cached and _utcnow() - cached["fetched_at"] < CACHE_TTL:
             return copy.deepcopy(cached["data"])
 
@@ -155,10 +246,15 @@ async def get_league_context(league_code: str) -> Dict[str, Any]:
 
     lock = await _get_league_lock()
     async with lock:
-        _league_cache[normalized_code] = {
+        _league_cache[cache_key] = {
             "data": copy.deepcopy(fresh),
             "fetched_at": _utcnow(),
         }
+        stale_keys = [
+            key for key in list(_league_cache.keys()) if key[0] == normalized_code and key != cache_key
+        ]
+        for key in stale_keys:
+            _league_cache.pop(key, None)
 
     return copy.deepcopy(fresh)
 
@@ -172,7 +268,8 @@ async def get_team_context(team_name: Optional[str], league_code: str) -> Option
 
     normalized_league = league_code.upper()
     normalized_team = team_name.strip().casefold()
-    cache_key = (normalized_league, normalized_team)
+    bucket = _current_bucket()
+    cache_key = (normalized_league, normalized_team, bucket)
 
     lock = await _get_team_lock()
     async with lock:
@@ -190,6 +287,13 @@ async def get_team_context(team_name: Optional[str], league_code: str) -> Option
             "data": copy.deepcopy(fresh),
             "fetched_at": _utcnow(),
         }
+        stale_keys = [
+            key
+            for key in list(_team_cache.keys())
+            if key[0] == normalized_league and key[1] == normalized_team and key != cache_key
+        ]
+        for key in stale_keys:
+            _team_cache.pop(key, None)
 
     return copy.deepcopy(fresh)
 
