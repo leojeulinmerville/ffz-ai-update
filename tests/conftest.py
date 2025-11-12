@@ -2,7 +2,7 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.db.database import Base
+from app.models.db import Base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from fastapi import Depends
@@ -37,6 +37,18 @@ app.dependency_overrides[get_db_prod] = get_test_db
 
 from app.api.subscriptions import get_db as get_db_subs
 app.dependency_overrides[get_db_subs] = get_test_db
+
+from app.api.scrape import get_db as get_db_scrape
+app.dependency_overrides[get_db_scrape] = get_test_db
+
+from app.api.facts import get_db as get_db_facts
+app.dependency_overrides[get_db_facts] = get_test_db
+
+from app.auth.security import get_db as get_db_security
+app.dependency_overrides[get_db_security] = get_test_db
+
+from app.api.news import get_db as get_db_news
+app.dependency_overrides[get_db_news] = get_test_db
 
 @pytest.fixture
 def client():
