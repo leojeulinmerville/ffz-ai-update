@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import asyncio
 import logging
 import os
@@ -67,3 +68,82 @@ async def send_weekly_report_via_email(
         "reference_id": reference_id,
         "sent_at": datetime.utcnow().isoformat(),
     }
+=======
+from __future__ import annotations
+
+import json
+import logging
+import os
+from typing import Dict
+
+from maileroo import EmailAddress, MailerooClient
+
+logger = logging.getLogger(__name__)
+
+
+class MailerooService:
+    def __init__(self) -> None:
+        api_key = os.getenv("MAILEROO_API_KEY")
+        if not api_key:
+            logger.error("MAILEROO_API_KEY missing – cannot send emails.")
+            self.client = None
+        else:
+            self.client = MailerooClient(api_key=api_key)
+
+        # On force bien le bon domaine par défaut
+        self.from_email = os.getenv(
+            "MAILEROO_DEFAULT_FROM",
+            "no-reply@6bc18d7eecc4f6bf.maileroo.org",
+        )
+        self.from_name = os.getenv("MAILEROO_FROM_NAME", "Football Fan Zone")
+
+        logger.info("Maileroo from_email=%s", self.from_email)
+
+    def send_weekly_email(
+        self,
+        to_email: str,
+        to_name: str | None,
+        subject: str,
+        html: str,
+        text: str,
+    ) -> Dict:
+        if not self.client:
+            return {
+                "success": False,
+                "reference_id": None,
+                "error": "maileroo_not_configured",
+            }
+
+        try:
+            sender = EmailAddress(address=self.from_email, display_name=self.from_name)
+            recipient = EmailAddress(address=to_email, display_name=to_name or to_email)
+            payload = {
+                "from": sender,
+                "to": [recipient],
+                "subject": subject,
+                "html": html,
+                "plain": text,
+            }
+            reference_id = self.client.send_basic_email(payload)
+            logger.info(
+                "Maileroo sent weekly email to %s reference=%s",
+                to_email,
+                reference_id,
+            )
+            return {"success": True, "reference_id": reference_id}
+        except Exception as exc:
+            logger.exception("Error sending weekly email to %s", to_email)
+            return {
+                "success": False,
+                "reference_id": None,
+                "error": str(exc),
+            }
+
+
+def serialize_email_status(status: Dict) -> str:
+    """Sérialise le status de Maileroo pour stockage en base."""
+    try:
+        return json.dumps(status)
+    except Exception:
+        return str(status)
+>>>>>>> Stashed changes
