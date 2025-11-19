@@ -11,4 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 ENV TZ=Europe/Paris
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Railway utilise la variable PORT, sinon on utilise 8000 par défaut
+# Utiliser shell form pour supporter la variable d'environnement
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

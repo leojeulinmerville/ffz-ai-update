@@ -1,4 +1,5 @@
 import logging
+import subprocess
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -68,12 +69,35 @@ async def startup_event() -> None:
     await init_db()
     try:
         await _ensure_database_current()
+        SCHEMA_ERROR_MSG = None
     except RuntimeError as exc:
         SCHEMA_ERROR_MSG = str(exc)
         logger.error("Database not ready: %s", exc)
-        return
+        # Tenter d'exécuter les migrations automatiquement
+        logger.info("Attempting to run migrations automatically...")
+        try:
+            result = subprocess.run(
+                ["alembic", "upgrade", "head"],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0:
+                logger.info("Migrations completed successfully")
+                SCHEMA_ERROR_MSG = None
+                # Vérifier à nouveau
+                await _ensure_database_current()
+            else:
+                logger.error("Migration failed: %s", result.stderr)
+        except Exception as migration_exc:
+            logger.warning("Auto-migration failed: %s", migration_exc)
+        logger.warning("Scheduler will start anyway but may fail until database is migrated")
+    
+    # Toujours démarrer le scheduler, même si la DB n'est pas prête
+    # Le job gérera les erreurs de DB de manière robuste
     schedule_jobs(scheduler)
     scheduler.start()
+    logger.info("Scheduler started successfully")
 
 
 @app.on_event("shutdown")
@@ -89,6 +113,16 @@ app.include_router(subs_router)
 app.include_router(news_router)
 app.include_router(facts_router)
 app.include_router(scrape_router)
+
+
+@app.get("/health")
+async def health_check():
+    """Endpoint de health check pour Railway et autres plateformes."""
+    return {
+        "status": "healthy",
+        "scheduler_running": scheduler.running if scheduler else False,
+        "database_ready": SCHEMA_ERROR_MSG is None,
+    }
 
 
 @app.get("/")

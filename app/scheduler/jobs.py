@@ -17,11 +17,18 @@ logger = logging.getLogger(__name__)
 async def run_weekly_job_once(db: AsyncSession):
     """
     Generate and persist a fresh weekly report for each active user.
+    Gère les erreurs de base de données de manière robuste.
     """
-    res_users = await db.execute(
-        select(User).where(User.is_active == True)  # noqa: E712
-    )
-    users = res_users.scalars().all()
+    try:
+        res_users = await db.execute(
+            select(User).where(User.is_active == True)  # noqa: E712
+        )
+        users = res_users.scalars().all()
+    except Exception as exc:
+        logger.error(
+            "Failed to fetch users from database (schema may not be ready): %s", exc
+        )
+        return  # Sortie gracieuse si la DB n'est pas prête
 
     logger.info(
         "Weekly generator starting at %s for %d active users",
@@ -48,9 +55,17 @@ async def run_weekly_job_once(db: AsyncSession):
 async def run_weekly_job_now():
     """
     Manual trigger helper (can be used elsewhere in the app).
+    Gère les erreurs de base de données de manière robuste pour ne pas planter le scheduler.
     """
-    async with AsyncSessionLocal() as db:
-        await run_weekly_job_once(db)
+    try:
+        async with AsyncSessionLocal() as db:
+            await run_weekly_job_once(db)
+    except Exception as exc:
+        # Gestion robuste des erreurs : on log mais on ne fait pas planter le scheduler
+        logger.exception(
+            "Scheduler job failed (database may not be ready): %s. Will retry at next scheduled time.",
+            exc
+        )
 
 
 def schedule_jobs(scheduler: AsyncIOScheduler):

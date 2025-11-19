@@ -234,8 +234,11 @@ def _fallback_narrative(
                 sentences.append(f"The gap between {leader_name} and {runner_name} is down to {diff} point(s).")
         if top_scorers:
             leader_scorer = top_scorers[0]
+            player_name = leader_scorer.get("player")
+            scorer_club = leader_scorer.get("club") or leader_scorer.get("team")
+            club_suffix = f" ({scorer_club})" if scorer_club else ""
             sentences.append(
-                f"Top scorer watch: {leader_scorer.get('player')} ({leader_scorer.get('club')}) sits on {leader_scorer.get('goals')} goals."
+                f"Top scorer watch: {player_name}{club_suffix} sits on {leader_scorer.get('goals')} goals."
             )
         calendar_notes = facts.get("calendar_notes") or []
         if calendar_notes:
