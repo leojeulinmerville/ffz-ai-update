@@ -35,18 +35,13 @@
     els.lastName = document.getElementById("last_name");
     els.email = document.getElementById("email");
     els.language = document.getElementById("language");
-    els.leagueCheckboxes = document.querySelectorAll('input[name="league"]');
+    els.leagueContainer = document.getElementById("league-container");
     els.favoriteTeam = document.getElementById("favorite_team");
     els.generateBtn = document.getElementById("btn-generate");
     els.sendEmailBtn = document.getElementById("btn-send-email");
 
     // Load leagues on startup
     loadLeagues();
-
-    // Update favorite team options when leagues change
-    els.leagueCheckboxes.forEach(cb => {
-      cb.addEventListener("change", updateFavoriteTeamOptions);
-    });
 
     // Form submission
     if (els.userForm) {
@@ -73,23 +68,30 @@
       const data = await res.json();
       state.leagues = data.leagues || [];
       
-      // Update league checkboxes
-      els.leagueCheckboxes.forEach(cb => {
-        const league = state.leagues.find(l => l.code === cb.value);
-        if (league) {
-          const label = cb.parentElement;
-          if (label) {
-            label.textContent = league.name;
-          }
-        }
-      });
+      renderLeagueCheckboxes();
     } catch (err) {
       setStatus(`Failed to load leagues: ${err}`, "error");
     }
   }
 
+  function renderLeagueCheckboxes() {
+    if (!els.leagueContainer) return;
+    els.leagueContainer.innerHTML = "";
+    state.leagues.forEach((league) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.name = "league";
+      input.value = league.code;
+      input.addEventListener("change", updateFavoriteTeamOptions);
+      label.appendChild(input);
+      label.append(` ${league.name}`);
+      els.leagueContainer.appendChild(label);
+    });
+  }
+
   async function updateFavoriteTeamOptions() {
-    const selectedLeagues = Array.from(els.leagueCheckboxes)
+    const selectedLeagues = Array.from(document.querySelectorAll('input[name="league"]:checked'))
       .filter(cb => cb.checked)
       .map(cb => cb.value);
 
@@ -125,7 +127,7 @@
     setStatus("Saving user profile...", "info");
     showLoading(event.target.querySelector('button[type="submit"]'), true);
 
-    const selectedLeagues = Array.from(els.leagueCheckboxes)
+    const selectedLeagues = Array.from(document.querySelectorAll('input[name="league"]:checked'))
       .filter(cb => cb.checked)
       .map(cb => cb.value);
 
@@ -149,7 +151,9 @@
         throw new Error(res.status);
       }
 
-      const data = await res.json();
+      await res.json();
+      // Auto-login with bootstrap password to enable protected actions
+      await loginAfterSave(payload.email);
       setStatus(`User profile saved successfully!`, "success");
     } catch (err) {
       setStatus(`Failed to save user: ${err}`, "error");
@@ -165,7 +169,7 @@
     try {
       const token = getToken();
       if (!token) {
-        setStatus("Please login first", "error");
+        setStatus("Please save the user first to login.", "error");
         return;
       }
 
@@ -202,7 +206,7 @@
     try {
       const token = getToken();
       if (!token) {
-        setStatus("Please login first", "error");
+        setStatus("Please save the user first to login.", "error");
         return;
       }
 
@@ -242,5 +246,23 @@
 
   function getToken() {
     return window.localStorage.getItem(TOKEN_KEY);
+  }
+
+  async function loginAfterSave(email) {
+    try {
+      const res = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "changeme" }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.access_token) {
+        window.localStorage.setItem(TOKEN_KEY, data.access_token);
+        window.localStorage.setItem(EMAIL_KEY, email);
+      }
+    } catch {
+      // best-effort; ignore errors
+    }
   }
 })();

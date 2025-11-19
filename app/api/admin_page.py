@@ -1,7 +1,15 @@
 from pathlib import Path
+from typing import List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+
+from app.auth.security import hash_password
+from app.models.db import AsyncSessionLocal
+from app.models.user import Subscription, User
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -211,3 +219,80 @@ async def admin_console() -> HTMLResponse:
         return HTMLResponse(content=html_content)
     # Fallback to deprecated inline HTML if file doesn't exist
     return HTMLResponse(content=ADMIN_HTML_DEPRECATED)
+
+
+class AdminUserPayload(BaseModel):
+    email: EmailStr
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    language: Optional[str] = "en"
+    favorite_team: Optional[str] = None
+    leagues: List[str]
+
+
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+@router.post("/user")
+async def upsert_admin_user(payload: AdminUserPayload, db: AsyncSession = Depends(get_db)):
+    if not payload.leagues:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one league is required")
+
+    result = await db.execute(select(User).where(User.email == payload.email.lower()))
+    user: Optional[User] = result.scalars().first()
+    bootstrap_hash = hash_password("changeme")
+
+    if user:
+        user.first_name = payload.first_name
+        user.last_name = payload.last_name
+        user.language = payload.language or user.language
+        user.favorite_team = payload.favorite_team
+        user.is_active = True
+    else:
+        user = User(
+            email=payload.email.lower(),
+            password_hash=bootstrap_hash,
+            language=payload.language or "en",
+            favorite_team=payload.favorite_team,
+            first_name=payload.first_name,
+            last_name=payload.last_name,
+            is_active=True,
+        )
+        db.add(user)
+        await db.flush()
+
+    result_subs = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
+    existing = {sub.league: sub for sub in result_subs.scalars().all()}
+    desired = {code.strip().upper() for code in payload.leagues if code.strip()}
+
+    for league_code in desired:
+        if league_code in existing:
+            existing[league_code].is_active = True
+            existing[league_code].frequency = existing[league_code].frequency or "weekly"
+        else:
+            db.add(
+                Subscription(
+                    user_id=user.id,
+                    league=league_code,
+                    team=None,
+                    frequency="weekly",
+                    is_active=True,
+                )
+            )
+
+    for league_code, sub in existing.items():
+        if league_code not in desired:
+            sub.is_active = False
+
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "language": user.language,
+        "favorite_team": user.favorite_team,
+        "leagues": list(desired),
+    }
