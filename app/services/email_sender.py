@@ -1,4 +1,5 @@
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 import asyncio
 import logging
 import os
@@ -69,6 +70,8 @@ async def send_weekly_report_via_email(
         "sent_at": datetime.utcnow().isoformat(),
     }
 =======
+=======
+>>>>>>> Stashed changes
 from __future__ import annotations
 
 import json
@@ -146,4 +149,7 @@ def serialize_email_status(status: Dict) -> str:
         return json.dumps(status)
     except Exception:
         return str(status)
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
