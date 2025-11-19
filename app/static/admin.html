@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Football Fan Zone – Admin</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 720px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      form,
+      section {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.3rem;
+        font-weight: bold;
+      }
+      input[type="text"],
+      input[type="email"],
+      select {
+        width: 100%;
+        padding: 0.4rem;
+        margin-bottom: 0.8rem;
+      }
+      .checkbox-group {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 0.8rem;
+      }
+      button {
+        padding: 0.6rem 1rem;
+        margin-right: 0.5rem;
+      }
+      #status {
+        min-height: 1.5rem;
+        margin-top: 0.5rem;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Football Fan Zone – Admin</h1>
+
+    <form id="user-form">
+      <h2>User profile</h2>
+      <label for="first_name">First name</label>
+      <input type="text" id="first_name" name="first_name" required />
+
+      <label for="last_name">Last name</label>
+      <input type="text" id="last_name" name="last_name" required />
+
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required />
+
+      <label for="language">Language</label>
+      <select id="language" name="language">
+        <option value="en">English</option>
+        <option value="fr">Francais</option>
+      </select>
+
+      <p>Followed leagues</p>
+      <div class="checkbox-group">
+        <label>
+          <input type="checkbox" name="league" value="PL" id="league_pl" />
+          Premier League
+        </label>
+        <label>
+          <input type="checkbox" name="league" value="FL1" id="league_fl1" />
+          Ligue 1
+        </label>
+        <label>
+          <input type="checkbox" name="league" value="CL" id="league_cl" />
+          Champions League
+        </label>
+      </div>
+
+      <label for="favorite_team">Favorite team</label>
+      <select id="favorite_team" name="favorite_team">
+        <option value="">Select at least one league</option>
+      </select>
+
+      <button type="submit">Save user &amp; leagues</button>
+    </form>
+
+    <section>
+      <h2>Weekly report</h2>
+      <button id="btn-generate" type="button">Generate weekly report</button>
+      <button id="btn-send-email" type="button">Send latest by email</button>
+      <div id="status"></div>
+    </section>
+
+    <script src="/static/admin.js"></script>
+  </body>
+</html>
