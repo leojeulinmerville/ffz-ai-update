@@ -3,9 +3,10 @@
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from pydantic import BaseModel
 
 from app.models.db import AsyncSessionLocal
 from app.models.user import User
@@ -14,8 +15,13 @@ from app.auth.security import get_current_user
 from app.services.generation_service import generate_and_store_weekly_report
 from app.services.report_builder import build_user_weekly_report
 from app.services.whatsapp_sender import send_weekly_report_via_whatsapp
+from app.services.email_sender import send_weekly_report_via_email
 
 router = APIRouter(prefix="/news", tags=["news"])
+
+
+class SendLatestRequest(BaseModel):
+    channel: str = "whatsapp"
 
 
 async def get_db():
@@ -84,6 +90,7 @@ async def get_my_latest_news(
 
 @router.post("/send_latest")
 async def send_my_latest_news(
+    payload: SendLatestRequest = Body(default_factory=SendLatestRequest),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -104,19 +111,33 @@ async def send_my_latest_news(
         raise HTTPException(status_code=404, detail="No report yet")
 
     report_payload = json.loads(row.payload)
-    status_dict = await send_weekly_report_via_whatsapp(report_payload)
+    channel = (payload.channel or "whatsapp").lower()
+    if channel == "email":
+        status_dict = await send_weekly_report_via_email(
+            report_payload,
+            user.email,
+            user.favorite_team or user.email,
+        )
+    else:
+        channel = "whatsapp"
+        status_dict = await send_weekly_report_via_whatsapp(report_payload)
 
     if status_dict.get("status") in {"sent", "partial"}:
         row.delivered_at = datetime.utcnow()
-        row.delivery_channel = "whatsapp"
+        row.delivery_channel = channel
         row.delivery_status = status_dict.get("status")
         await db.flush()
     else:
-        status_dict.setdefault("detail", "WhatsApp delivery skipped")
+        status_dict.setdefault("detail", "Delivery skipped")
 
     await db.commit()
     await db.refresh(row)
 
     status_dict["report_id"] = row.id
+    status_dict["channel"] = channel
     status_dict.setdefault("delivery_status", row.delivery_status)
     return status_dict
+
+
+class SendLatestRequest(BaseModel):
+    channel: str = "whatsapp"

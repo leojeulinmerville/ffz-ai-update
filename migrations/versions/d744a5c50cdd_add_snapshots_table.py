@@ -24,8 +24,8 @@ def upgrade() -> None:
     op.create_table(
         "snapshots",
         sa.Column("id", sa.String, primary_key=True),
-        sa.Column("user_id", sa.String, sa.ForeignKey("users.id"), nullable=False, index=True),
-        sa.Column("league_code", sa.String, nullable=False, index=True),
+        sa.Column("user_id", sa.String, sa.ForeignKey("users.id"), nullable=False),
+        sa.Column("league_code", sa.String, nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

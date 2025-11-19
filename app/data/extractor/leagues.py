@@ -112,7 +112,11 @@ def parse_standings(html: str) -> List[StandingRow]:
         if not team_name:
             continue
 
-        rank = _safe_int(row.css_first("span.ssrcss-4fgj5b-Rank").text(strip=True))
+        rank_node = _find_span_with_class_fragment(row, "Rank")
+        if rank_node:
+            rank = _safe_int(rank_node.text(strip=True))
+        else:
+            rank = _extract_leading_int(cells[0].text(separator=" ", strip=True))
         played = _safe_int(cells[1].text(strip=True))
         wins = _safe_int(cells[2].text(strip=True))
         draws = _safe_int(cells[3].text(strip=True))
@@ -205,6 +209,23 @@ def parse_fixtures(html: str) -> List[FixtureRow]:
             if len(fixtures) >= 20:
                 break
     return fixtures
+
+
+def _find_span_with_class_fragment(node, fragment: str):
+    for span in node.css("span"):
+        class_value = span.attributes.get("class", "")
+        if fragment in class_value:
+            return span
+    return None
+
+
+def _extract_leading_int(value: Optional[str]) -> int:
+    if not value:
+        return 0
+    match = re.search(r"\d+", value)
+    if not match:
+        return 0
+    return _safe_int(match.group(0))
 
 
 def _parse_heading_date(text: str) -> Optional[datetime]:

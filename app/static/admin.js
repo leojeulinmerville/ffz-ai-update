@@ -30,6 +30,7 @@
     els.scrapePersistBtn = document.getElementById("scrape-persist");
     els.latestBtn = document.getElementById("show-latest");
     els.sendBtn = document.getElementById("send-latest");
+    els.sendChannel = document.getElementById("send-channel");
     els.reportOutput = document.getElementById("report-output");
     els.deliveryOutput = document.getElementById("delivery-output");
     els.toast = document.getElementById("toast");
@@ -318,11 +319,22 @@
   }
 
   async function sendLatestReport() {
-    setStatus("Sending latest report via WhatsApp...");
-    const data = await authed("/news/send_latest", { method: "POST" });
+    const channel = (els.sendChannel && els.sendChannel.value) || "whatsapp";
+    const channelLabel = channel === "email" ? "Email" : "WhatsApp";
+    setStatus(`Sending latest report via ${channelLabel}...`);
+    const data = await authed(
+      "/news/send_latest",
+      {
+        method: "POST",
+        body: JSON.stringify({ channel }),
+      },
+      null,
+    );
     if (data) {
       els.deliveryOutput.textContent = JSON.stringify(data, null, 2);
-      setStatus(`WhatsApp send status: ${data.status || data.delivery_status || "ok"}`);
+      const reportedChannel = (data.channel || channel || "whatsapp").toLowerCase();
+      const reportedLabel = reportedChannel === "email" ? "Email" : "WhatsApp";
+      setStatus(`${reportedLabel} send status: ${data.status || data.delivery_status || "ok"}`);
     }
   }
 
