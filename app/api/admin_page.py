@@ -1,9 +1,15 @@
+from pathlib import Path
+
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-ADMIN_HTML = """<!DOCTYPE html>
+# Read HTML from external file
+ADMIN_HTML_PATH = Path(__file__).parent.parent / "static" / "admin.html"
+
+# Using external HTML file instead of inline
+ADMIN_HTML_DEPRECATED = """<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -199,4 +205,9 @@ ADMIN_HTML = """<!DOCTYPE html>
 
 @router.get("", response_class=HTMLResponse)
 async def admin_console() -> HTMLResponse:
-    return HTMLResponse(content=ADMIN_HTML)
+    # Read from external HTML file
+    if ADMIN_HTML_PATH.exists():
+        html_content = ADMIN_HTML_PATH.read_text(encoding="utf-8")
+        return HTMLResponse(content=html_content)
+    # Fallback to deprecated inline HTML if file doesn't exist
+    return HTMLResponse(content=ADMIN_HTML_DEPRECATED)

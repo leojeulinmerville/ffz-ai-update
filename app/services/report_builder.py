@@ -19,7 +19,20 @@ from app.models.snapshot import Snapshot
 from app.models.user import Subscription, User
 from app.news.llm_generator import generate_article
 from app.services import quality_guard
-from app.services.snapshots import get_latest_snapshot_payload, store_snapshot
+from app.services.analytics import (
+    calculate_statistics,
+    identify_trends,
+    calculate_team_form,
+)
+from app.services.snapshot_comparator import (
+    compare_snapshots,
+    get_team_evolution,
+)
+from app.services.snapshots import (
+    get_latest_snapshot_payload,
+    get_previous_snapshot_payload,
+    store_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 _FALLBACK_WARN_RATIO = float(os.getenv("FFZ_FALLBACK_WARN_RATIO", "0.25"))
@@ -52,7 +65,11 @@ async def build_league_article(
         snapshot_payload.setdefault("sources_used", normalized.sources)
         await store_snapshot(db, user_id, league_code, snapshot_payload, snapshot_payload["sources_used"])
         await db.commit()
-    facts = _build_llm_facts(snapshot_payload, favorite_team)
+    
+    # Get previous snapshot for comparison
+    previous_snapshot = await get_previous_snapshot_payload(db, user_id, league_code)
+    
+    facts = await _build_llm_facts(snapshot_payload, favorite_team, previous_snapshot, fixtures=snapshot_payload.get("fixtures_next", []))
     fan_focus = bool(facts.get("fan_team"))
 
     try:
@@ -160,6 +177,8 @@ async def build_user_weekly_report(user_id: str, db: AsyncSession) -> Dict:
             "email": user.email,
             "language": user.language,
             "favorite_team": user.favorite_team,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
         },
         "articles": articles,
         "health": health,
@@ -216,9 +235,14 @@ def _build_health(total: int, fallback_count: int) -> Dict[str, Any]:
     }
 
 
-def _build_llm_facts(payload: Dict[str, Any], favorite_team: Optional[str]) -> Dict[str, Any]:
+async def _build_llm_facts(
+    payload: Dict[str, Any],
+    favorite_team: Optional[str],
+    previous_snapshot: Optional[Dict[str, Any]] = None,
+    fixtures: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     table = [row for row in (payload.get("table") or []) if row.get("team")]
-    fixtures = payload.get("fixtures_next") or []
+    fixtures = fixtures or payload.get("fixtures_next") or []
     top_rows = table[:5]
 
     top5: List[Dict[str, Any]] = []
@@ -235,7 +259,23 @@ def _build_llm_facts(payload: Dict[str, Any], favorite_team: Optional[str]) -> D
     next_match = _find_next_match(fixtures, favorite_team)
     top_scorers = (payload.get("top_scorers") or [])[:10]
 
-    return {
+    # Calculate enriched statistics
+    stats = calculate_statistics(table)
+    trends = identify_trends(table)
+    
+    # Compare with previous snapshot
+    snapshot_comparison = compare_snapshots(payload, previous_snapshot)
+    
+    # Get team evolution if favorite team exists
+    fan_evolution = None
+    fan_form_data = []
+    if favorite_team:
+        fan_evolution = get_team_evolution(payload, previous_snapshot, favorite_team)
+        # Calculate form (placeholder - will be enhanced when we have match results)
+        fan_form_data = calculate_team_form(favorite_team, fixtures)
+    
+    # Build enriched facts dict
+    facts: Dict[str, Any] = {
         "league_code": payload.get("league_code"),
         "league_name": payload.get("league_name"),
         "top5": top5,
@@ -243,11 +283,18 @@ def _build_llm_facts(payload: Dict[str, Any], favorite_team: Optional[str]) -> D
         "tight_gaps": tight_gaps,
         "calendar_notes": [],
         "fan_team": favorite_team if next_match else None,
-        "fan_form": [],
+        "fan_form": fan_form_data,
         "next_match": next_match,
         "sources_used": payload.get("sources_used") or [],
         "table": table,
+        # Enriched data
+        "statistics": stats,
+        "trends": trends,
+        "snapshot_comparison": snapshot_comparison,
+        "fan_evolution": fan_evolution,
     }
+    
+    return facts
 
 
 async def _league_targets_from_snapshots(

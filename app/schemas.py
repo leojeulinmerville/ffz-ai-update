@@ -6,19 +6,19 @@ from pydantic import BaseModel, EmailStr
 
 
 class AdminUserPayload(BaseModel):
-    first_name: str
-    last_name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: EmailStr
     language: str
-    favorite_team: str
+    favorite_team: Optional[str] = None
     leagues: List[str]
 
 
 class AdminUserResponse(BaseModel):
-    id: int
+    id: str
     email: EmailStr
-    first_name: str
-    last_name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     language: str
-    favorite_team: Optional[str]
+    favorite_team: Optional[str] = None
     leagues: List[str]

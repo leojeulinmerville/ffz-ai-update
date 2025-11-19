@@ -23,16 +23,16 @@ def _get_current_user(db: Session) -> Optional[User]:
 
 def _build_user_response(user: User, db: Session) -> AdminUserResponse:
     leagues: List[str] = [
-        sub.league_code
+        sub.league
         for sub in db.query(Subscription)
         .filter(Subscription.user_id == user.id, Subscription.is_active.is_(True))
         .all()
     ]
     return AdminUserResponse(
-        id=user.id,
+        id=str(user.id),
         email=user.email,
-        first_name=user.first_name or "",
-        last_name=user.last_name or "",
+        first_name=user.first_name,
+        last_name=user.last_name,
         language=user.language,
         favorite_team=user.favorite_team,
         leagues=leagues,
@@ -67,7 +67,7 @@ def upsert_admin_user(payload: AdminUserPayload, db: Session = Depends(get_db)) 
     for league_code in payload.leagues:
         if not league_code:
             continue
-        sub = Subscription(user_id=user.id, league_code=league_code, is_active=True)
+        sub = Subscription(user_id=user.id, league=league_code, is_active=True)
         db.add(sub)
 
     db.commit()

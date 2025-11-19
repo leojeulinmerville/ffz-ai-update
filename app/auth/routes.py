@@ -28,6 +28,8 @@ async def get_db():
 class RegisterSchema(BaseModel):
     email: EmailStr
     password: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     language: str = "en"
     favorite_team: str | None = None
     phone_number: Optional[str] = None
@@ -49,6 +51,8 @@ async def register_user(
     user = User(
         email=normalized_email,
         password_hash=hash_password(payload.password),
+        first_name=payload.first_name,
+        last_name=payload.last_name,
         language=language,
         favorite_team=payload.favorite_team,
         phone_number=phone_number,
@@ -93,6 +97,8 @@ async def me(user=Depends(get_current_user)):
     return {
         "id": str(user.id),
         "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
         "language": user.language,
         "favorite_team": user.favorite_team,
         "is_active": user.is_active,

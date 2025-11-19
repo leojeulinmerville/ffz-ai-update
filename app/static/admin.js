@@ -9,99 +9,62 @@
 
   const els = {};
 
-  document.addEventListener("DOMContentLoaded", () => {
-    els.status = document.getElementById("status");
-    els.registerForm = document.getElementById("register-form");
-    els.loginForm = document.getElementById("login-form");
-    els.registerEmail = document.getElementById("register-email");
-    els.registerPassword = document.getElementById("register-password");
-    els.registerLanguage = document.getElementById("register-language");
-    els.registerPhone = document.getElementById("register-phone");
-    els.fanLeague = document.getElementById("fan-league");
-    els.fanTeam = document.getElementById("fan-team");
-    els.loginEmail = document.getElementById("login-email");
-    els.loginPassword = document.getElementById("login-password");
-    els.leaguesSelect = document.getElementById("leagues");
-    els.loadLeaguesBtn = document.getElementById("load-leagues");
-    els.followLeaguesBtn = document.getElementById("follow-leagues");
-    els.logoutBtn = document.getElementById("logout");
-    els.generateBtn = document.getElementById("generate-report");
-    els.scrapePreviewBtn = document.getElementById("scrape-preview");
-    els.scrapePersistBtn = document.getElementById("scrape-persist");
-    els.latestBtn = document.getElementById("show-latest");
-    els.sendBtn = document.getElementById("send-latest");
-    els.sendChannel = document.getElementById("send-channel");
-    els.reportOutput = document.getElementById("report-output");
-    els.deliveryOutput = document.getElementById("delivery-output");
-    els.toast = document.getElementById("toast");
-
-    els.registerForm.addEventListener("submit", onRegister);
-    els.loginForm.addEventListener("submit", onLogin);
-    els.fanLeague.addEventListener("change", updateFanTeams);
-    els.loadLeaguesBtn.addEventListener("click", () => loadLeagues(true));
-    els.followLeaguesBtn.addEventListener("click", followSelectedLeagues);
-    els.logoutBtn.addEventListener("click", logout);
-    els.generateBtn.addEventListener("click", generateWeeklyReport);
-    els.scrapePreviewBtn.addEventListener("click", runScrapePreview);
-    els.scrapePersistBtn.addEventListener("click", runPersistScrape);
-    els.latestBtn.addEventListener("click", showLatestReport);
-    els.sendBtn.addEventListener("click", sendLatestReport);
-
-    const storedEmail = window.localStorage.getItem(EMAIL_KEY);
-    if (storedEmail) {
-      els.loginEmail.value = storedEmail;
-      setStatus(`Logged in as ${storedEmail}`);
-    }
-
-    loadLeagues(false);
-  });
-
-  function setStatus(message) {
+  function setStatus(message, type = "info") {
     if (els.status) {
       els.status.textContent = message;
+      els.status.className = type;
+      els.status.style.display = "block";
     }
   }
 
-  function saveAuth(token, email) {
-    if (token) {
-      window.localStorage.setItem(TOKEN_KEY, token);
+  function showLoading(button, show = true) {
+    if (!button) return;
+    if (show) {
+      button.disabled = true;
+      button.innerHTML = button.textContent + '<span class="loading"></span>';
+    } else {
+      button.disabled = false;
+      button.innerHTML = button.textContent.replace('<span class="loading"></span>', '');
     }
-    if (email) {
-      window.localStorage.setItem(EMAIL_KEY, email);
-      els.loginEmail.value = email;
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    els.status = document.getElementById("status");
+    els.userForm = document.getElementById("user-form");
+    els.firstName = document.getElementById("first_name");
+    els.lastName = document.getElementById("last_name");
+    els.email = document.getElementById("email");
+    els.language = document.getElementById("language");
+    els.leagueCheckboxes = document.querySelectorAll('input[name="league"]');
+    els.favoriteTeam = document.getElementById("favorite_team");
+    els.generateBtn = document.getElementById("btn-generate");
+    els.sendEmailBtn = document.getElementById("btn-send-email");
+
+    // Load leagues on startup
+    loadLeagues();
+
+    // Update favorite team options when leagues change
+    els.leagueCheckboxes.forEach(cb => {
+      cb.addEventListener("change", updateFavoriteTeamOptions);
+    });
+
+    // Form submission
+    if (els.userForm) {
+      els.userForm.addEventListener("submit", handleUserFormSubmit);
     }
-    setStatus(`Logged in as ${email}`);
-  }
 
-  function logout() {
-    window.localStorage.removeItem(TOKEN_KEY);
-    window.localStorage.removeItem(EMAIL_KEY);
-    if (els.loginEmail) els.loginEmail.value = "";
-    if (els.loginPassword) els.loginPassword.value = "";
-    resetOutputs();
-    setStatus("Logged out.");
-  }
+    // Generate report
+    if (els.generateBtn) {
+      els.generateBtn.addEventListener("click", generateWeeklyReport);
+    }
 
-  function getToken() {
-    return window.localStorage.getItem(TOKEN_KEY);
-  }
+    // Send email
+    if (els.sendEmailBtn) {
+      els.sendEmailBtn.addEventListener("click", sendLatestEmail);
+    }
+  });
 
-  function resetOutputs() {
-    els.reportOutput.textContent = "";
-    els.deliveryOutput.textContent = "";
-  }
-
-  function showToast(message) {
-    if (!els.toast) return;
-    els.toast.textContent = message;
-    els.toast.classList.add("visible");
-    clearTimeout(state.toastTimeout);
-    state.toastTimeout = window.setTimeout(() => {
-      els.toast.classList.remove("visible");
-    }, 4000);
-  }
-
-  async function loadLeagues(showToast) {
+  async function loadLeagues() {
     try {
       const res = await fetch("/meta/leagues");
       if (!res.ok) {
@@ -109,307 +72,175 @@
       }
       const data = await res.json();
       state.leagues = data.leagues || [];
+      
+      // Update league checkboxes
+      els.leagueCheckboxes.forEach(cb => {
+        const league = state.leagues.find(l => l.code === cb.value);
+        if (league) {
+          const label = cb.parentElement;
+          if (label) {
+            label.textContent = league.name;
+          }
+        }
+      });
     } catch (err) {
-      setStatus(`Failed to load leagues: ${err}`);
-      return;
-    }
-
-    els.leaguesSelect.innerHTML = "";
-    els.fanLeague.innerHTML = '<option value="">(optional)</option>';
-
-    state.leagues.forEach((league) => {
-      const option = document.createElement("option");
-      option.value = league.code;
-      option.textContent = `${league.name} (${league.code})`;
-      els.leaguesSelect.appendChild(option.cloneNode(true));
-      els.fanLeague.appendChild(option);
-    });
-
-    if (showToast) {
-      setStatus("Leagues refreshed.");
+      setStatus(`Failed to load leagues: ${err}`, "error");
     }
   }
 
-  async function updateFanTeams() {
-    const code = els.fanLeague.value;
-    els.fanTeam.innerHTML = "";
+  async function updateFavoriteTeamOptions() {
+    const selectedLeagues = Array.from(els.leagueCheckboxes)
+      .filter(cb => cb.checked)
+      .map(cb => cb.value);
 
-    if (!code) {
-      els.fanTeam.innerHTML = '<option value="">Select a league first</option>';
+    if (!els.favoriteTeam) return;
+
+    els.favoriteTeam.innerHTML = '<option value="">Select a league first</option>';
+
+    if (selectedLeagues.length === 0) {
       return;
     }
 
-    if (!state.teams[code]) {
-      try {
-        const res = await fetch(`/meta/leagues/${code}/teams`);
-        if (!res.ok) throw new Error(res.status);
-        const data = await res.json();
-        state.teams[code] = data.teams || [];
-      } catch (err) {
-        setStatus(`Failed to load teams for ${code}: ${err}`);
-        els.fanTeam.innerHTML = '<option value="">Unable to load teams</option>';
-        return;
-      }
-    }
+    // Load teams for the first selected league
+    const firstLeague = selectedLeagues[0];
+    try {
+      const res = await fetch(`/meta/leagues/${firstLeague}/teams`);
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      const teams = data.teams || [];
 
-    els.fanTeam.innerHTML = '<option value="">(optional)</option>';
-    state.teams[code].forEach((team) => {
-      const opt = document.createElement("option");
-      opt.value = team.name;
-      opt.textContent = team.name;
-      els.fanTeam.appendChild(opt);
-    });
+      teams.forEach(team => {
+        const option = document.createElement("option");
+        option.value = team.name;
+        option.textContent = team.name;
+        els.favoriteTeam.appendChild(option);
+      });
+    } catch (err) {
+      setStatus(`Failed to load teams: ${err}`, "error");
+    }
   }
 
-  async function onRegister(event) {
+  async function handleUserFormSubmit(event) {
     event.preventDefault();
-    resetOutputs();
+    setStatus("Saving user profile...", "info");
+    showLoading(event.target.querySelector('button[type="submit"]'), true);
+
+    const selectedLeagues = Array.from(els.leagueCheckboxes)
+      .filter(cb => cb.checked)
+      .map(cb => cb.value);
 
     const payload = {
-      email: els.registerEmail.value.trim().toLowerCase(),
-      password: els.registerPassword.value,
-      language: els.registerLanguage.value,
-      phone_number: els.registerPhone.value.trim() || null,
-      favorite_team: els.fanTeam.value || null,
+      email: els.email.value.trim().toLowerCase(),
+      first_name: els.firstName.value.trim() || null,
+      last_name: els.lastName.value.trim() || null,
+      language: els.language.value,
+      favorite_team: els.favoriteTeam.value || null,
+      leagues: selectedLeagues,
     };
 
     try {
-      const res = await fetch("/auth/register", {
+      const res = await fetch("/admin/user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      if (res.status === 409) {
-        setStatus("Email already registered. Switching to login.");
-        els.loginEmail.value = payload.email;
-        els.loginPassword.value = payload.password;
-        await onLogin(null, payload.email, payload.password);
-        return;
-      }
-
       if (!res.ok) {
         throw new Error(res.status);
       }
 
-      await onLogin(null, payload.email, payload.password);
-      await loadLeagues(false);
-      await updateFanTeams();
-    } catch (err) {
-      setStatus(`Registration failed: ${err}`);
-    }
-  }
-
-  async function onLogin(event, emailOverride, passwordOverride) {
-    if (event) event.preventDefault();
-    resetOutputs();
-
-    const email = emailOverride ?? els.loginEmail.value.trim().toLowerCase();
-    const password = passwordOverride ?? els.loginPassword.value;
-
-    try {
-      const res = await fetch("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      if (!res.ok) throw new Error(res.status);
       const data = await res.json();
-      saveAuth(data.access_token, email);
+      setStatus(`User profile saved successfully!`, "success");
     } catch (err) {
-      setStatus(`Login failed: ${err}`);
+      setStatus(`Failed to save user: ${err}`, "error");
+    } finally {
+      showLoading(event.target.querySelector('button[type="submit"]'), false);
     }
-  }
-
-  async function followSelectedLeagues() {
-    const token = getToken();
-    if (!token) {
-      setStatus("Please login first.");
-      return;
-    }
-
-    const selected = Array.from(els.leaguesSelect.selectedOptions).map((opt) => opt.value);
-    if (!selected.length) {
-      setStatus("Select at least one league to follow.");
-      return;
-    }
-
-    await authed("/subscriptions/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leagues: selected }),
-    }, `Followed ${selected.join(", ")}`);
   }
 
   async function generateWeeklyReport() {
-    setStatus("Generating weekly report...");
-    const response = await authed("/news/generate", { method: "POST" });
-    if (!response) {
-      setStatus("Generation failed.");
-      return;
-    }
-    setStatus("Report generated. Fetching latest snapshot...");
-    await showLatestReport(true);
-    setStatus("Weekly report generated.");
-  }
+    setStatus("Generating weekly report...", "info");
+    showLoading(els.generateBtn, true);
 
-  async function showLatestReport(silent = false) {
-    if (!silent) {
-      setStatus("Loading latest weekly report...");
-    }
-    const data = await authed("/news/latest");
-    if (data) {
-      els.reportOutput.textContent = JSON.stringify(data, null, 2);
-      if (!silent) {
-        setStatus("Latest weekly report ready.");
-      }
-    }
-  }
-
-  async function runScrapePreview() {
-    resetOutputs();
-    const league = selectLeagueCode();
-    if (!league) {
-      setStatus("Select or follow at least one league first.");
-      return;
-    }
-    setStatus(`Scraping ${league} (live preview)...`);
     try {
-      const res = await fetch(`/scrape/preview?league=${encodeURIComponent(league)}`);
+      const token = getToken();
+      if (!token) {
+        setStatus("Please login first", "error");
+        return;
+      }
+
+      const res = await fetch("/news/generate", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (res.status === 401) {
+        setStatus("Session expired, please login again", "error");
+        window.localStorage.removeItem(TOKEN_KEY);
+        return;
+      }
+
       if (!res.ok) {
-        if (res.status === 403) {
-          showToast("Robots.txt blocked this source. Try another league.");
-        } else if (res.status === 502) {
-          showToast("Upstream BBC endpoint returned 502. Retry shortly.");
-        }
         throw new Error(res.status);
       }
+
       const data = await res.json();
-      els.reportOutput.textContent = JSON.stringify(data, null, 2);
-      setStatus(`Scrape preview ready for ${league}.`);
+      setStatus(`Weekly report generated successfully! (${data.report?.articles?.length || 0} articles)`, "success");
     } catch (err) {
-      setStatus(`Scrape preview failed: ${err}`);
+      setStatus(`Failed to generate report: ${err}`, "error");
+    } finally {
+      showLoading(els.generateBtn, false);
     }
   }
 
-  async function runPersistScrape() {
-    resetOutputs();
-    const league = selectLeagueCode();
-    if (!league) {
-      setStatus("Select or follow at least one league first.");
-      return;
-    }
+  async function sendLatestEmail() {
+    setStatus("Sending email...", "info");
+    showLoading(els.sendEmailBtn, true);
 
-    setStatus(`Storing snapshot for ${league}...`);
-    const payload = { leagues: [league] };
-    const data = await authed(
-      "/scrape/run",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      },
-      null,
-    );
-    if (data && data.snapshot_id) {
-      setStatus(`Snapshot stored for ${league}. Loading cache...`);
-      await loadLatestFacts(league);
-      setStatus(`Snapshot stored for ${league}.`);
-    }
-  }
-
-  async function sendLatestReport() {
-    const channel = (els.sendChannel && els.sendChannel.value) || "whatsapp";
-    const channelLabel = channel === "email" ? "Email" : "WhatsApp";
-    setStatus(`Sending latest report via ${channelLabel}...`);
-    const data = await authed(
-      "/news/send_latest",
-      {
-        method: "POST",
-        body: JSON.stringify({ channel }),
-      },
-      null,
-    );
-    if (data) {
-      els.deliveryOutput.textContent = JSON.stringify(data, null, 2);
-      const reportedChannel = (data.channel || channel || "whatsapp").toLowerCase();
-      const reportedLabel = reportedChannel === "email" ? "Email" : "WhatsApp";
-      setStatus(`${reportedLabel} send status: ${data.status || data.delivery_status || "ok"}`);
-    }
-  }
-
-  async function loadLatestFacts(league) {
-    const token = getToken();
-    if (!token) {
-      setStatus("Please login first.");
-      return;
-    }
     try {
-      const res = await fetch(`/facts/latest?league=${encodeURIComponent(league)}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const token = getToken();
+      if (!token) {
+        setStatus("Please login first", "error");
+        return;
+      }
+
+      const res = await fetch("/news/send_latest", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ channel: "email" }),
       });
-      if (!res.ok) throw new Error(res.status);
-      const payload = await res.json();
-      resetOutputs();
-      els.reportOutput.textContent = JSON.stringify(payload, null, 2);
-    } catch (err) {
-      setStatus(`Failed to load cached facts: ${err}`);
-    }
-  }
 
-  function selectLeagueCode() {
-    const selected = els.leaguesSelect.selectedOptions;
-    if (selected && selected.length) {
-      return selected[0].value;
-    }
-    if (els.fanLeague.value) {
-      return els.fanLeague.value;
-    }
-    if (state.leagues.length) {
-      return state.leagues[0].code;
-    }
-    return null;
-  }
-
-  async function authed(path, options = {}, successMessage = null) {
-    resetOutputs();
-    const token = getToken();
-    if (!token) {
-      setStatus("Please login first.");
-      return null;
-    }
-
-    const headers = {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${token}`,
-    };
-
-    if (options.body && !headers["Content-Type"]) {
-      headers["Content-Type"] = "application/json";
-    }
-
-    try {
-      const res = await fetch(path, { ...options, headers });
       if (res.status === 401) {
-        setStatus("Session expired, please login again.");
+        setStatus("Session expired, please login again", "error");
         window.localStorage.removeItem(TOKEN_KEY);
-        return null;
+        return;
       }
-      if (!res.ok) throw new Error(res.status);
-      if (successMessage) setStatus(successMessage);
-      if (path === "/news/send_latest") {
-        const payload = await res.json();
-        els.deliveryOutput.textContent = JSON.stringify(payload, null, 2);
-        return payload;
+
+      if (res.status === 404) {
+        setStatus("No report available. Generate one first.", "error");
+        return;
       }
-      try {
-        return await res.json();
-      } catch {
-        return null;
+
+      if (!res.ok) {
+        throw new Error(res.status);
       }
+
+      const data = await res.json();
+      const statusText = data.status === "sent" ? "sent successfully" : data.status;
+      setStatus(`Email ${statusText}!`, "success");
     } catch (err) {
-      setStatus(`Request failed: ${err}`);
-      return null;
+      setStatus(`Failed to send email: ${err}`, "error");
+    } finally {
+      showLoading(els.sendEmailBtn, false);
     }
+  }
+
+  function getToken() {
+    return window.localStorage.getItem(TOKEN_KEY);
   }
 })();

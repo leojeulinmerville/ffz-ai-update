@@ -131,19 +131,60 @@ def format_weekly_report_email(payload: Dict[str, Any]) -> Dict[str, str]:
     user = payload.get("user") or {}
     language = (user.get("language") or "fr").lower()
     favorite_team = user.get("favorite_team")
+    first_name = user.get("first_name")
     articles = payload.get("articles") or []
 
     subject = _email_subject(language, favorite_team)
-    intro = _email_intro(language, favorite_team)
+    intro = _email_intro(language, favorite_team, first_name)
     outro = _email_outro(language)
 
     text_lines: List[str] = [intro, ""]
-    html_parts: List[str] = [f"<p>{_esc(intro)}</p>"]
+    
+    # HTML email avec design moderne
+    html_parts: List[str] = [
+        '<!DOCTYPE html>',
+        '<html lang="' + language + '">',
+        '<head>',
+        '<meta charset="UTF-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+        '<style>',
+        '  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f8f9fa; margin: 0; padding: 0; }',
+        '  .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }',
+        '  .header { background: linear-gradient(135deg, #1a73e8 0%, #34a853 100%); color: white; padding: 30px 20px; text-align: center; }',
+        '  .header h1 { margin: 0; font-size: 24px; font-weight: 600; }',
+        '  .content { padding: 30px 20px; }',
+        '  .intro { font-size: 18px; color: #1a73e8; margin-bottom: 25px; font-weight: 500; }',
+        '  .league-card { background: #ffffff; border-left: 4px solid #1a73e8; border-radius: 8px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }',
+        '  .league-card h2 { margin-top: 0; color: #1a73e8; font-size: 20px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }',
+        '  .narrative { color: #555; margin: 15px 0; line-height: 1.8; }',
+        '  .fan-spotlight { background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 6px; padding: 15px; margin: 20px 0; }',
+        '  .fan-spotlight strong { color: #856404; display: block; margin-bottom: 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }',
+        '  .watchlist { background: #e7f3ff; border-radius: 6px; padding: 15px; margin: 15px 0; }',
+        '  .watchlist strong { color: #1a73e8; display: block; margin-bottom: 10px; }',
+        '  .watchlist ul { margin: 0; padding-left: 20px; }',
+        '  .watchlist li { margin: 8px 0; color: #555; }',
+        '  .sources { font-size: 12px; color: #999; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }',
+        '  .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 14px; border-top: 1px solid #eee; }',
+        '  .divider { height: 1px; background: #eee; margin: 30px 0; }',
+        '  @media only screen and (max-width: 600px) {',
+        '    .container { width: 100% !important; }',
+        '    .content { padding: 20px 15px; }',
+        '  }',
+        '</style>',
+        '</head>',
+        '<body>',
+        '<div class="container">',
+        '<div class="header">',
+        '<h1>⚽ Football Fan Zone</h1>',
+        '</div>',
+        '<div class="content">',
+        f'<div class="intro">{_esc(intro)}</div>',
+    ]
 
     fan_summary = _build_fan_summary_section(payload, language)
     if fan_summary:
         text_lines.extend([fan_summary["plain"], ""])
-        html_parts.append(fan_summary["html"])
+        html_parts.append(f'<div class="fan-spotlight"><strong>{_fan_label(language)}</strong><p>{_esc(fan_summary["plain"])}</p></div>')
 
     if not articles:
         placeholder = (
@@ -152,40 +193,77 @@ def format_weekly_report_email(payload: Dict[str, Any]) -> Dict[str, str]:
             else "No report available yet - generate one from the admin console."
         )
         text_lines.append(placeholder)
-        html_parts.append(f"<p>{_esc(placeholder)}</p>")
+        html_parts.append(f'<p>{_esc(placeholder)}</p>')
     else:
         for idx, article in enumerate(articles, start=1):
             section = _normalize_article(article, language)
             section_lines = [
                 section["title"],
                 section["narrative"],
+            ]
+            # Add key moments if available
+            if section.get("key_moments"):
+                key_moments_label = "Moments clés" if language == "fr" else "Key Moments"
+                section_lines.append(key_moments_label)
+                for moment in section["key_moments"]:
+                    section_lines.append(f"- {moment}")
+                section_lines.append("")
+            section_lines.extend([
                 section["fan_spotlight_text"],
                 section["watchlist_text"],
                 section["sources"],
                 "",
-            ]
+            ])
             text_lines.extend(part for part in section_lines if part)
 
-            html_parts.append(f"<h2>{_esc(section['title'])}</h2>")
+            html_parts.append('<div class="league-card">')
+            html_parts.append(f'<h2>{_esc(section["title"])}</h2>')
             if section["narrative"]:
-                html_parts.append(f"<p>{_esc(section['narrative'])}</p>")
+                html_parts.append(f'<div class="narrative">{_esc(section["narrative"])}</div>')
+            
+            # Key moments (new field)
+            if section.get("key_moments"):
+                key_moments_label = "Moments clés" if language == "fr" else "Key Moments"
+                html_parts.append(f'<div class="watchlist"><strong>{key_moments_label}</strong>')
+                html_parts.append("<ul>" + "".join(f'<li>{_esc(item)}</li>' for item in section["key_moments"]) + "</ul></div>")
+            
+            # Fan spotlight: handle both old (string) and new (object) formats
             if section["fan_spotlight"]:
-                html_parts.append(
-                    f"<p><strong>{_fan_label(language)}:</strong> {_esc(section['fan_spotlight'])}</p>"
-                )
+                if section.get("fan_analysis"):
+                    # New format: structured object
+                    html_parts.append(f'<div class="fan-spotlight"><strong>{_fan_label(language)}</strong>')
+                    if section["fan_analysis"]:
+                        html_parts.append(f'<p><strong>Analyse:</strong> {_esc(section["fan_analysis"])}</p>')
+                    if section["fan_preview"]:
+                        html_parts.append(f'<p><strong>{"Prochain match" if language == "fr" else "Next Match"}:</strong> {_esc(section["fan_preview"])}</p>')
+                    if section["fan_tactical"]:
+                        html_parts.append(f'<p><strong>{"Tactique" if language == "fr" else "Tactics"}:</strong> {_esc(section["fan_tactical"])}</p>')
+                    html_parts.append("</div>")
+                else:
+                    # Old format: simple string
+                    html_parts.append(
+                        f'<div class="fan-spotlight"><strong>{_fan_label(language)}</strong><p>{_esc(section["fan_spotlight"])}</p></div>'
+                    )
+            
             if section["watchlist_items"]:
-                html_parts.append(f"<p><strong>{_watchlist_label(language)}</strong></p>")
-                html_parts.append(
-                    "<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in section["watchlist_items"]) + "</ul>"
-                )
+                html_parts.append(f'<div class="watchlist"><strong>{_watchlist_label(language)}</strong>')
+                html_parts.append("<ul>" + "".join(f'<li>{_esc(item)}</li>' for item in section["watchlist_items"]) + "</ul></div>")
             if section["sources"]:
-                html_parts.append(f"<p class=\"sources\">{_esc(section['sources'])}</p>")
+                html_parts.append(f'<div class="sources">{_esc(section["sources"])}</div>')
+            html_parts.append("</div>")
+            
             if idx < len(articles):
                 text_lines.append("")
-                html_parts.append("<hr />")
+                html_parts.append('<div class="divider"></div>')
 
     text_lines.append(outro)
-    html_parts.append(f"<p>{_esc(outro)}</p>")
+    html_parts.extend([
+        f'<div class="footer">{_esc(outro)}</div>',
+        '</div>',
+        '</div>',
+        '</body>',
+        '</html>',
+    ])
 
     return {
         "subject": subject,
@@ -202,18 +280,64 @@ def _normalize_article(article: Dict[str, Any], language: str) -> Dict[str, Any]
         or "Weekly spotlight"
     )
     narrative = (article.get("narrative") or article.get("text") or "").strip()
-    fan = (article.get("fan_spotlight") or "").strip()
+    
+    # Handle fan_spotlight: can be string (old format) or object (new format)
+    fan_spotlight_raw = article.get("fan_spotlight")
+    fan = ""
+    fan_analysis = ""
+    fan_preview = ""
+    fan_tactical = ""
+    
+    if fan_spotlight_raw:
+        if isinstance(fan_spotlight_raw, dict):
+            # New format: object
+            fan_analysis = (fan_spotlight_raw.get("analysis") or "").strip()
+            fan_preview = (fan_spotlight_raw.get("next_match_preview") or "").strip()
+            fan_tactical = (fan_spotlight_raw.get("tactical_notes") or "").strip()
+            # Combine for text version
+            fan_parts = [p for p in [fan_analysis, fan_preview, fan_tactical] if p]
+            fan = " ".join(fan_parts)
+        else:
+            # Old format: string
+            fan = str(fan_spotlight_raw).strip()
+    
+    # Handle key_moments (new field)
+    key_moments = article.get("key_moments") or []
+    if key_moments and isinstance(key_moments, list):
+        key_moments = [str(m).strip() for m in key_moments if m and str(m).strip()]
+    
     watchlist_items = [item.strip() for item in (article.get("watchlist") or []) if item and item.strip()]
     watchlist_text = ""
     if watchlist_items:
         label = _watchlist_label(language)
         watchlist_text = "\n".join([label] + [f"- {item}" for item in watchlist_items])
     sources = _format_sources_footer(article.get("sources_used"))
+    # Build fan_spotlight_text for plain text version
+    fan_spotlight_text = ""
+    if fan:
+        if fan_analysis or fan_preview or fan_tactical:
+            # New format: combine all parts
+            fan_parts = []
+            if fan_analysis:
+                fan_parts.append(fan_analysis)
+            if fan_preview:
+                fan_parts.append(fan_preview)
+            if fan_tactical:
+                fan_parts.append(fan_tactical)
+            fan_spotlight_text = f"{_fan_label(language)} : {' '.join(fan_parts)}"
+        else:
+            # Old format: simple string
+            fan_spotlight_text = f"{_fan_label(language)} : {fan}"
+    
     return {
         "title": title,
         "narrative": narrative,
         "fan_spotlight": fan,
-        "fan_spotlight_text": f"{_fan_label(language)} : {fan}" if fan else "",
+        "fan_spotlight_text": fan_spotlight_text,
+        "fan_analysis": fan_analysis,
+        "fan_preview": fan_preview,
+        "fan_tactical": fan_tactical,
+        "key_moments": key_moments,
         "watchlist_items": watchlist_items,
         "watchlist_text": watchlist_text,
         "sources": sources,
@@ -311,11 +435,19 @@ def _email_subject(language: str, favorite_team: Optional[str]) -> str:
     return base
 
 
-def _email_intro(language: str, favorite_team: Optional[str]) -> str:
+def _email_intro(language: str, favorite_team: Optional[str], first_name: Optional[str] = None) -> str:
     if language == "fr":
+        if first_name:
+            if favorite_team:
+                return f"Salut {first_name} ! Voici ce qu'il faut retenir pour {favorite_team}."
+            return f"Salut {first_name} ! Voici ta dose hebdomadaire signée Football Fan Zone."
         if favorite_team:
             return f"Salut ! Voici ce qu'il faut retenir pour {favorite_team}."
-        return "Salut ! Voici ta dose hebdomadaire signee Football Fan Zone."
+        return "Salut ! Voici ta dose hebdomadaire signée Football Fan Zone."
+    if first_name:
+        if favorite_team:
+            return f"Hey {first_name}! Here's what's new for {favorite_team}."
+        return f"Hey {first_name}! Here's your Football Fan Zone weekly digest."
     if favorite_team:
         return f"Hey! Here's what's new for {favorite_team}."
     return "Hey! Here's your Football Fan Zone weekly digest."

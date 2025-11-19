@@ -39,9 +39,10 @@ def ensure_article(
     if not _is_valid_candidate(candidate, language, fan_focus):
         return fallback_article(sanitized_facts, language, fan_focus, watchlist), True
 
-    headline = _clean_text(candidate.get("headline", ""), language)[:85]
+    headline = _clean_text(candidate.get("headline", ""), language)[:100]  # Increased from 85 to 100
     narrative = _clean_text(candidate.get("narrative", ""), language)
     fan_spotlight_raw = candidate.get("fan_spotlight")
+    key_moments = candidate.get("key_moments", [])
     candidate_watchlist = candidate.get("watchlist") or []
 
     fallback_used = False
@@ -55,19 +56,49 @@ def ensure_article(
         fallback_used = True
     watchlist = enforced_watchlist
 
+    # Handle fan_spotlight: can be string (old format) or object (new format)
     fan_spotlight = None
     if fan_focus and sanitized_facts.get("next_match"):
         if fan_spotlight_raw:
-            cleaned = _clean_text(fan_spotlight_raw, language)
-            fan_spotlight = _enforce_fan_spotlight_length(cleaned, sanitized_facts, language)
+            if isinstance(fan_spotlight_raw, dict):
+                # New format: object with analysis, next_match_preview, tactical_notes
+                fan_spotlight = {
+                    "analysis": _clean_text(fan_spotlight_raw.get("analysis", ""), language),
+                    "next_match_preview": _clean_text(fan_spotlight_raw.get("next_match_preview", ""), language),
+                    "tactical_notes": _clean_text(fan_spotlight_raw.get("tactical_notes", ""), language),
+                }
+                # Validate lengths
+                if len(fan_spotlight["analysis"]) < 400 or len(fan_spotlight["analysis"]) > 600:
+                    fan_spotlight = _fallback_fan_spotlight_object(sanitized_facts, language)
+            else:
+                # Old format: string
+                cleaned = _clean_text(str(fan_spotlight_raw), language)
+                fan_spotlight_str = _enforce_fan_spotlight_length(cleaned, sanitized_facts, language)
+                if fan_spotlight_str:
+                    # Convert old format to new format for consistency
+                    fan_spotlight = {
+                        "analysis": fan_spotlight_str,
+                        "next_match_preview": "",
+                        "tactical_notes": "",
+                    }
         else:
-            fan_spotlight = None
+            fan_spotlight = _fallback_fan_spotlight_object(sanitized_facts, language)
+    
+    # Process key_moments if present
+    processed_key_moments = []
+    if key_moments and isinstance(key_moments, list):
+        for moment in key_moments[:2]:
+            if isinstance(moment, str) and moment.strip():
+                cleaned = _clean_text(moment, language)
+                if 80 <= len(cleaned) <= 120:
+                    processed_key_moments.append(cleaned)
 
     return (
         {
             "league_code": sanitized_facts.get("league_code"),
             "headline": headline or (sanitized_facts.get("league_name") or ""),
             "narrative": narrative,
+            "key_moments": processed_key_moments if processed_key_moments else None,
             "watchlist": watchlist,
             "fan_spotlight": fan_spotlight,
         },
@@ -302,6 +333,65 @@ def _fallback_fan_spotlight(facts: Dict[str, Any], language: str) -> Optional[st
     return text[:FAN_MAX] if len(text) > FAN_MAX else text
 
 
+def _fallback_fan_spotlight_object(facts: Dict[str, Any], language: str) -> Optional[Dict[str, str]]:
+    """Generate fallback fan spotlight in new object format."""
+    fan_team = facts.get("fan_team")
+    if not fan_team:
+        return None
+
+    next_match = facts.get("next_match") or {}
+    if not (next_match.get("home") and next_match.get("away")):
+        return None
+
+    opponent = next_match["away"] if next_match["home"] == fan_team else next_match["home"]
+    kickoff = _format_paris_datetime(
+        next_match.get("local_kickoff") or next_match.get("paris_kickoff") or next_match.get("utc_kickoff"),
+        language,
+    )
+    
+    # Get evolution data if available
+    fan_evolution = facts.get("fan_evolution", {})
+    current_pos = fan_evolution.get("current_stats", {}).get("position") if fan_evolution else None
+    position_change = fan_evolution.get("change", 0) if fan_evolution else 0
+    
+    if language == "fr":
+        analysis = f"{fan_team} occupe actuellement la {current_pos}e position" if current_pos else f"{fan_team}"
+        if position_change > 0:
+            analysis += f", en hausse de {position_change} place(s)."
+        elif position_change < 0:
+            analysis += f", en baisse de {abs(position_change)} place(s)."
+        else:
+            analysis += " maintient sa position."
+        
+        preview = f"Prochain match face à {opponent}"
+        if kickoff:
+            preview += f" ({kickoff})"
+        preview += ". Un match crucial pour la suite de la saison."
+        
+        tactical = "Surveillez les transitions rapides et la pression haute. Le contrôle du milieu sera déterminant."
+    else:
+        analysis = f"{fan_team} currently sit in {current_pos}th position" if current_pos else f"{fan_team}"
+        if position_change > 0:
+            analysis += f", up {position_change} place(s)."
+        elif position_change < 0:
+            analysis += f", down {abs(position_change)} place(s)."
+        else:
+            analysis += " maintain their position."
+        
+        preview = f"Next up against {opponent}"
+        if kickoff:
+            preview += f" ({kickoff})"
+        preview += ". A crucial match for the season ahead."
+        
+        tactical = "Watch for quick transitions and high pressing. Midfield control will be decisive."
+    
+    return {
+        "analysis": analysis[:600],
+        "next_match_preview": preview[:300],
+        "tactical_notes": tactical[:250],
+    }
+
+
 def _describe_form(form: List[str], language: str) -> str:
     wins = form.count("W")
     draws = form.count("D")
@@ -333,11 +423,13 @@ def _is_valid_candidate(candidate: Optional[Dict[str, Any]], language: str, fan_
     if not candidate or not isinstance(candidate, dict):
         return False
 
-    required_keys = {"league_code", "headline", "narrative", "watchlist", "fan_spotlight"}
+    required_keys = {"league_code", "headline", "narrative", "watchlist"}
     if not required_keys.issubset(candidate.keys()):
         return False
 
-    if not isinstance(candidate.get("watchlist"), list) or len(candidate["watchlist"]) < 2:
+    # Support both old format (fan_spotlight as string) and new format (fan_spotlight as object)
+    watchlist = candidate.get("watchlist")
+    if not isinstance(watchlist, list) or len(watchlist) < 2:
         return False
 
     narrative = candidate.get("narrative")
@@ -347,8 +439,15 @@ def _is_valid_candidate(candidate: Optional[Dict[str, Any]], language: str, fan_
     if BANNED_MARKDOWN.search(narrative or ""):
         return False
 
-    if fan_focus is False and candidate.get("fan_spotlight"):
+    # Check fan_spotlight: can be null, string (old format), or object (new format)
+    fan_spotlight = candidate.get("fan_spotlight")
+    if fan_focus is False and fan_spotlight:
         return False
+    if fan_focus is True and fan_spotlight:
+        # If it's an object, check it has the right structure
+        if isinstance(fan_spotlight, dict):
+            if not all(key in fan_spotlight for key in ["analysis", "next_match_preview", "tactical_notes"]):
+                return False
 
     return True
 
@@ -479,3 +578,62 @@ def _enforce_fan_spotlight_length(text: Optional[str], facts: Dict[str, Any], la
             return fallback
     clipped = _clip_text(text, FAN_MAX)
     return clipped if len(clipped) >= FAN_MIN else None
+
+
+def _fallback_fan_spotlight_object(facts: Dict[str, Any], language: str) -> Optional[Dict[str, str]]:
+    """Generate fallback fan spotlight in new object format."""
+    fan_team = facts.get("fan_team")
+    if not fan_team:
+        return None
+
+    next_match = facts.get("next_match") or {}
+    if not (next_match.get("home") and next_match.get("away")):
+        return None
+
+    opponent = next_match["away"] if next_match["home"] == fan_team else next_match["home"]
+    kickoff = _format_paris_datetime(
+        next_match.get("local_kickoff") or next_match.get("paris_kickoff") or next_match.get("utc_kickoff"),
+        language,
+    )
+    
+    # Get evolution data if available
+    fan_evolution = facts.get("fan_evolution", {})
+    current_pos = fan_evolution.get("current_stats", {}).get("position") if fan_evolution else None
+    position_change = fan_evolution.get("change", 0) if fan_evolution else 0
+    
+    if language == "fr":
+        analysis = f"{fan_team} occupe actuellement la {current_pos}e position" if current_pos else f"{fan_team}"
+        if position_change > 0:
+            analysis += f", en hausse de {position_change} place(s)."
+        elif position_change < 0:
+            analysis += f", en baisse de {abs(position_change)} place(s)."
+        else:
+            analysis += " maintient sa position."
+        
+        preview = f"Prochain match face à {opponent}"
+        if kickoff:
+            preview += f" ({kickoff})"
+        preview += ". Un match crucial pour la suite de la saison."
+        
+        tactical = "Surveillez les transitions rapides et la pression haute. Le contrôle du milieu sera déterminant."
+    else:
+        analysis = f"{fan_team} currently sit in {current_pos}th position" if current_pos else f"{fan_team}"
+        if position_change > 0:
+            analysis += f", up {position_change} place(s)."
+        elif position_change < 0:
+            analysis += f", down {abs(position_change)} place(s)."
+        else:
+            analysis += " maintain their position."
+        
+        preview = f"Next up against {opponent}"
+        if kickoff:
+            preview += f" ({kickoff})"
+        preview += ". A crucial match for the season ahead."
+        
+        tactical = "Watch for quick transitions and high pressing. Midfield control will be decisive."
+    
+    return {
+        "analysis": analysis[:600],
+        "next_match_preview": preview[:300],
+        "tactical_notes": tactical[:250],
+    }

@@ -17,6 +17,8 @@ class User(Base):
     id = Column(String, primary_key=True, default=gen_uuid_str)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
     language = Column(String, default="fr")
     favorite_team = Column(String, nullable=True)
     phone_number = Column(String, nullable=True)

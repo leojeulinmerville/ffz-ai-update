@@ -52,3 +52,28 @@ async def get_latest_snapshot_payload(
     if not snapshot:
         return None
     return snapshot.payload
+
+
+async def get_previous_snapshot_payload(
+    db: AsyncSession,
+    user_id: str,
+    league_code: str,
+) -> Optional[Dict]:
+    """Get the second most recent snapshot for comparison."""
+    user_id = str(user_id)
+    league_code = league_code.upper()
+    stmt = (
+        select(Snapshot)
+        .where(
+            Snapshot.user_id == user_id,
+            Snapshot.league_code == league_code,
+        )
+        .order_by(Snapshot.created_at.desc())
+        .offset(1)
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    snapshot = result.scalars().first()
+    if not snapshot:
+        return None
+    return snapshot.payload
