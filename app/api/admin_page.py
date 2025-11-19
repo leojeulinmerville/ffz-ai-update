@@ -173,7 +173,13 @@ ADMIN_HTML = """<!DOCTYPE html>
         <button id="scrape-preview" type="button">Scrape now (preview)</button>
         <button id="scrape-persist" type="button">Run scrape job (persist)</button>
         <button id="show-latest" type="button">Show latest report</button>
-        <button id="send-latest" type="button">Send latest via WhatsApp</button>
+
+        <label for="send-channel">Delivery channel</label>
+        <select id="send-channel">
+          <option value="whatsapp" selected>WhatsApp</option>
+          <option value="email">Email</option>
+        </select>
+        <button id="send-latest" type="button">Send latest report</button>
 
         <label>Latest payload</label>
         <pre id="report-output"></pre>
