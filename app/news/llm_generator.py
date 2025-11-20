@@ -117,34 +117,68 @@ def _build_messages(facts: Dict[str, Any], language: str, fan_focus: bool) -> Li
 
 
 async def _call_mistral(messages: List[Dict[str, str]]) -> str:
+    if not _mistral_client:
+        return ""
+
     def _invoke() -> str:
         completion = _mistral_client.chat.complete(
             model=MISTRAL_MODEL,
             messages=messages,
             temperature=0.4,
+            top_p=0.9,
             max_tokens=1500,
         )
-        return completion.choices[0].message.content.strip()
+        choice = completion.choices[0] if completion and completion.choices else None
+        content = getattr(choice.message, "content", "") if choice else ""
+        return (content or "").strip()
 
-    return await asyncio.to_thread(_invoke)
+    try:
+        return await asyncio.to_thread(_invoke)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Mistral generation failed: %s", exc)
+        return ""
 
 
 async def _call_openai(messages: List[Dict[str, str]]) -> str:
+    if not _openai_client:
+        return ""
+
     def _invoke() -> str:
         response = _openai_client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=messages,
             temperature=0.4,
+            top_p=0.9,
+            frequency_penalty=0.2,
             max_tokens=1500,
         )
-        return response.choices[0].message.content.strip()
+        choice = response.choices[0] if response and response.choices else None
+        content = getattr(choice.message, "content", "") if choice else ""
+        return (content or "").strip()
 
-    return await asyncio.to_thread(_invoke)
+    try:
+        return await asyncio.to_thread(_invoke)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("OpenAI generation failed: %s", exc)
+        return ""
 
 
 def _parse_candidate(raw: str) -> Optional[Dict[str, Any]]:
+    if not raw:
+        return None
+
+    text = raw.strip()
+
+    # Common case: model wraps JSON in code fences
+    if text.startswith("```"):
+        lines = text.splitlines()
+        # drop first/last fence lines
+        inner = "\n".join(line for line in lines[1:-1] if not line.strip().startswith("```")).strip()
+        if inner:
+            text = inner
+
     try:
-        return json.loads(raw)
+        return json.loads(text)
     except json.JSONDecodeError:
-        logger.warning("LLM returned non-JSON content")
+        logger.warning("LLM returned non-JSON content: %s", text[:200])
         return None

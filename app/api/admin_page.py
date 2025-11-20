@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.auth.security import hash_password
+from app.auth.security import hash_password, create_jwt_token
 from app.models.db import AsyncSessionLocal
 from app.models.user import Subscription, User
 
@@ -250,6 +250,8 @@ async def upsert_admin_user(payload: AdminUserPayload, db: AsyncSession = Depend
         user.language = payload.language or user.language
         user.favorite_team = payload.favorite_team
         user.is_active = True
+        # reset bootstrap password so admin auto-login works
+        user.password_hash = hash_password("changeme")
     else:
         user = User(
             email=payload.email.lower(),
@@ -289,10 +291,13 @@ async def upsert_admin_user(payload: AdminUserPayload, db: AsyncSession = Depend
     await db.commit()
     await db.refresh(user)
 
+    access_token = create_jwt_token(user.id)
+
     return {
         "user_id": user.id,
         "email": user.email,
         "language": user.language,
         "favorite_team": user.favorite_team,
         "leagues": list(desired),
+        "access_token": access_token,
     }

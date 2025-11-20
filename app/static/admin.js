@@ -151,9 +151,14 @@
         throw new Error(res.status);
       }
 
-      await res.json();
-      // Auto-login with bootstrap password to enable protected actions
-      await loginAfterSave(payload.email);
+      const data = await res.json();
+      if (data.access_token) {
+        window.localStorage.setItem(TOKEN_KEY, data.access_token);
+        window.localStorage.setItem(EMAIL_KEY, payload.email);
+      } else {
+        // fallback: attempt a login with bootstrap password
+        await loginAfterSave(payload.email);
+      }
       setStatus(`User profile saved successfully!`, "success");
     } catch (err) {
       setStatus(`Failed to save user: ${err}`, "error");
