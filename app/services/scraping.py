@@ -32,8 +32,29 @@ LEAGUE_SOURCES: Dict[str, Dict[str, Any]] = {
     "FL1": {
         "name": "Ligue 1",
         "sources": [
-            {"url": "https://www.bbc.com/sport/football/ligue-1", "label": "BBC Sport"},
+            {"url": "https://www.bbc.com/sport/football/french-ligue-one", "label": "BBC Sport"},
             {"url": "https://www.skysports.com/ligue-1-news", "label": "Sky Sports"},
+        ],
+    },
+    "PD": {
+        "name": "LaLiga",
+        "sources": [
+            {"url": "https://www.bbc.com/sport/football/la-liga", "label": "BBC Sport"},
+            {"url": "https://www.skysports.com/la-liga-news", "label": "Sky Sports"},
+        ],
+    },
+    "BL1": {
+        "name": "Bundesliga",
+        "sources": [
+            {"url": "https://www.bbc.com/sport/football/german-bundesliga", "label": "BBC Sport"},
+            {"url": "https://www.bundesliga.com/en/bundesliga/news", "label": "Bundesliga.com"},
+        ],
+    },
+    "SA": {
+        "name": "Serie A",
+        "sources": [
+            {"url": "https://www.bbc.com/sport/football/italian-serie-a", "label": "BBC Sport"},
+            {"url": "https://www.skysports.com/serie-a-news", "label": "Sky Sports"},
         ],
     },
     "CL": {
@@ -151,7 +172,7 @@ def scrape_all_user_leagues(user: User, db: Session) -> Dict[str, Any]:
         .filter(Subscription.user_id == user.id, Subscription.is_active.is_(True))
         .all()
     )
-    league_codes = sorted({sub.league_code.upper() for sub in subscriptions if sub.league_code})
+    league_codes = sorted({(sub.league or sub.league_code or "").upper() for sub in subscriptions if (sub.league or getattr(sub, "league_code", None))})
     leagues: List[Dict[str, Any]] = []
     all_sources: List[str] = []
 

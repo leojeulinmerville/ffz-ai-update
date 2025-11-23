@@ -8,13 +8,13 @@ PARIS_TZ = ZoneInfo("Europe/Paris")
 BANNED_MARKDOWN = re.compile(r"[*_~`]")
 WHITESPACE_RE = re.compile(r"\s+")
 
-WATCHLIST_MAX_CHARS = 80
+WATCHLIST_MAX_CHARS = 140  # allow fuller watchlist sentences before clipping
 NARRATIVE_TARGET_MIN = 450
-NARRATIVE_TARGET_MAX = 700
+NARRATIVE_TARGET_MAX = 900
 NARRATIVE_HARD_MIN = 350
-NARRATIVE_HARD_MAX = 750
-FAN_MIN = 350
-FAN_MAX = 550
+NARRATIVE_HARD_MAX = 950
+FAN_MIN = 320
+FAN_MAX = 800
 
 DAY_NAMES = {
     "fr": ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."],

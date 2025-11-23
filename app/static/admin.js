@@ -97,24 +97,33 @@
 
     if (!els.favoriteTeam) return;
 
-    els.favoriteTeam.innerHTML = '<option value="">Select a league first</option>';
+    els.favoriteTeam.innerHTML = '<option value="">Select at least one league</option>';
 
     if (selectedLeagues.length === 0) {
       return;
     }
 
-    // Load teams for the first selected league
-    const firstLeague = selectedLeagues[0];
     try {
-      const res = await fetch(`/meta/leagues/${firstLeague}/teams`);
-      if (!res.ok) throw new Error(res.status);
-      const data = await res.json();
-      const teams = data.teams || [];
+      const allTeams = new Map();
+      for (const league of selectedLeagues) {
+        const res = await fetch(`/meta/leagues/${league}/teams`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        for (const team of data.teams || []) {
+          const key = `${team.name}|${league}`;
+          if (!allTeams.has(key)) {
+            allTeams.set(key, { name: team.name, league });
+          }
+        }
+      }
 
-      teams.forEach(team => {
+      const sorted = Array.from(allTeams.values()).sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+      );
+      sorted.forEach(({ name, league }) => {
         const option = document.createElement("option");
-        option.value = team.name;
-        option.textContent = team.name;
+        option.value = name;
+        option.textContent = `${name} (${league})`;
         els.favoriteTeam.appendChild(option);
       });
     } catch (err) {

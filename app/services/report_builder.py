@@ -77,8 +77,7 @@ async def build_league_article(
     except Exception as exc:  # pragma: no cover - defensive guardrail
         logger = logging.getLogger(__name__)
         logger.exception("generate_article failed for %s: %s", league_code, exc)
-        article = quality_guard.fallback_article(facts, language, fan_focus)
-        provider = "fallback"
+        raise
 
     legacy_text = _compose_legacy_snapshot(article, language)
 
@@ -162,15 +161,12 @@ async def build_user_weekly_report(user_id: str, db: AsyncSession) -> Dict:
     fallback_count = sum(
         1 for article in articles if article.get("generator_provider") == "fallback"
     )
-    health = _build_health(len(articles), fallback_count)
-    if health["status"] != "ok":
-        logger.warning(
-            "Report builder health=%s user=%s fallback=%d/%d",
-            health["status"],
-            user.email,
-            fallback_count,
-            len(articles),
+    if fallback_count > 0:
+        raise RuntimeError(
+            f"LLM generation failed (fallback used) for user {user.email}: {fallback_count}/{len(articles)} articles."
         )
+
+    health = _build_health(len(articles), fallback_count)
 
     return {
         "user": {
