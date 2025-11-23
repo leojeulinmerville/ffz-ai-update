@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.data.extractor.leagues import fetch_league_bundle
+from app.data.extractor.vision import fetch_latest_match_stats
 from app.data.normalizer import bundle_to_facts
 from app.models.db import AsyncSessionLocal
 from app.models.snapshot import Snapshot
@@ -269,6 +270,17 @@ async def _build_llm_facts(
         fan_evolution = get_team_evolution(payload, previous_snapshot, favorite_team)
         # Calculate form (placeholder - will be enhanced when we have match results)
         fan_form_data = calculate_team_form(favorite_team, fixtures)
+        
+        # [NEW] Vision Extraction
+        # Only fetch if we don't have recent match data in the snapshot or if we want to enrich it
+        # This is expensive, so maybe we should cache it or only do it if the last match was recent.
+        # For now, we call it.
+        try:
+            vision_stats = await fetch_latest_match_stats(favorite_team)
+            if vision_stats:
+                facts["last_match_vision"] = vision_stats
+        except Exception as exc:
+            logger.warning("Vision fetch failed for %s: %s", favorite_team, exc)
     
     # Build enriched facts dict
     facts: Dict[str, Any] = {

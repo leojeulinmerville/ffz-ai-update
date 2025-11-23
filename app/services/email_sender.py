@@ -67,3 +67,38 @@ async def send_weekly_report_via_email(
         "reference_id": reference_id,
         "sent_at": datetime.utcnow().isoformat(),
     }
+
+
+async def send_verification_email(email: str, token: str) -> None:
+    if not _MAILEROO_CLIENT or not _MAILEROO_FROM:
+        logger.warning("Maileroo not configured, skipping verification email to %s", email)
+        return
+
+    # In a real app, this would be a proper link to the frontend
+    # Assuming the frontend is served at the same domain
+    # We need to know the public URL. For now, we'll assume localhost:8000 or relative.
+    # But email needs absolute URL.
+    # Let's use a placeholder or env var, default to localhost:8000
+    base_url = os.getenv("PUBLIC_URL", "http://localhost:8000")
+    link = f"{base_url}/verify?token={token}"
+
+    html = f"""
+    <h1>Welcome to Football Fan Zone!</h1>
+    <p>Please click the link below to verify your email address:</p>
+    <p><a href="{link}">Verify Email</a></p>
+    <p>Or copy this link: {link}</p>
+    """
+    
+    data = {
+        "from": EmailAddress(_MAILEROO_FROM, _MAILEROO_FROM_NAME),
+        "to": [EmailAddress(email)],
+        "subject": "Verify your FFZ account",
+        "html": html,
+        "plain": f"Please verify your email: {link}",
+    }
+
+    try:
+        await _send_basic_email(data)
+        logger.info("Verification email sent to %s", email)
+    except Exception as exc:
+        logger.error("Failed to send verification email: %s", exc)
