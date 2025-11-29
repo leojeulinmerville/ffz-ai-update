@@ -7,16 +7,21 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 conn = sqlite3.connect('ffz.db')
 cursor = conn.cursor()
 
+import uuid
+
+# ...
+
 # Create a test user
 email = "test@ffz.com"
 password = "password123"
 password_hash = pwd_context.hash(password)
+user_id = str(uuid.uuid4())
 
 try:
     cursor.execute("""
-        INSERT INTO users (email, password_hash, is_active, is_verified, language, first_name, last_name)
-        VALUES (?, ?, 1, 1, 'en', 'Test', 'User')
-    """, (email, password_hash))
+        INSERT INTO users (id, email, password_hash, is_active, is_verified, language, first_name, last_name, subscription_status, tone)
+        VALUES (?, ?, ?, 1, 1, 'en', 'Test', 'User', 'trial', 'fan')
+    """, (user_id, email, password_hash))
     conn.commit()
     print(f"✓ Test user created:")
     print(f"  Email: {email}")

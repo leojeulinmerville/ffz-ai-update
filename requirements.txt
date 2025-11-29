@@ -1,7 +1,8 @@
 fastapi==0.115.0
 uvicorn==0.30.6
 sqlalchemy==2.0.34
-aiosqlite==0.20.0
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
 bcrypt==4.2.0
 PyJWT==2.9.0
 python-dotenv==1.0.1
@@ -18,5 +19,5 @@ beautifulsoup4==4.12.3
 tenacity==9.1.2
 selectolax==0.4.0
 maileroo==1.0.0
-playwright==1.47.0
-
+stripe==8.0.0
+playwright

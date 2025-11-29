@@ -1,129 +1,410 @@
-## Football Fan Zone – AI Weekly Companion
+# Football Fan Zone – AI Weekly Companion
 
-FFZ scrapes live BBC football data, snapshots it per league, feeds an LLM to write engaging stories, then formats and delivers them to each subscribed user via WhatsApp or Maileroo email. The pipeline is “agentic”: data acquisition, reasoning (LLM + guards), and delivery are separate agents orchestrated by the scheduler or the admin console.
+**Your personal football journalist: data-driven, multi-lingual, delivered every week.**
 
----
-
-### Stack at a Glance
-- **FastAPI** – public/admin APIs and HTML console (`app/main.py`, `app/api/*`).
-- **SQLite + Alembic** – persistence and migrations (`ffz.db`, `migrations/`).
-- **Async SQLAlchemy** – DB access (`app/models/*`, `app/models/db.py`).
-- **Scraping/normalization** – BBC standings/fixtures/scorers (`app/data/extractor/leagues.py`, `app/data/normalizer.py`).
-- **LLM generation** – Mistral or OpenAI (`app/news/llm_generator.py`) guarded by `app/services/quality_guard.py`; falls back to deterministic copy if JSON is bad or providers fail.
-- **Delivery** – WhatsApp/CallMeBot (`app/services/whatsapp_sender.py`) and Maileroo email (`app/services/email_sender.py`), channel-specific formatting in `app/services/formatter.py`.
-- **Scheduler** – APScheduler + CLI runner (`app/scheduler/jobs.py`, `app/scheduler/weekly.py`).
-- **Admin UI** – single-page console (`app/api/admin_page.py`, `app/static/admin.html`, `app/static/admin.js`).
-
-Key flow:
-1) Scrape/snapshot: fetch BBC data, normalize, and cache per league.
-2) Build report: assemble user facts, call LLM (Mistral → OpenAI → fallback), parse JSON (code-fence tolerant), and guard output.
-3) Deliver: format per channel, chunk WhatsApp, build HTML/plain email, send via provider, record status.
-4) Orchestrate: scheduler runs weekly (Mon 09:00 Europe/Paris, or interval override) or via admin buttons; `/news/send_latest` delivers on demand.
+FFZ is a B2C SaaS that generates personalized weekly football reports for fans worldwide. It scrapes match data, analyzes stats with AI, and delivers tailored reports in your language and tone preference.
 
 ---
 
-### LLM Providers
-- Order: Mistral (if `MISTRAL_API_KEY` set) → OpenAI (if `OPENAI_API_KEY` set) → deterministic fallback.
-- Calls now include safe choice handling; JSON parsing tolerates code fences and logs non-JSON content.
-- Adjust weights in `.env`: `MISTRAL_MODEL`, `OPENAI_MODEL`.
+## 🚀 Quick Start
 
----
+### Prerequisites
+- **Docker Desktop** (recommended) OR
+- **Python 3.12+** + **PostgreSQL 15+** (for local development)
 
-### Admin Console (http://localhost:8000/admin)
-- Save user & leagues: POST `/admin/user` creates/updates the user, resets password to `changeme`, and returns an `access_token` (auto-stored by `admin.js`). Mandatory: at least one league.
-- Followed leagues: dynamically fetched from `/meta/leagues`; favorite teams fetched from `/meta/leagues/{code}/teams`.
-- Actions: Generate Weekly Report (calls `/news/generate`), Send Latest by Email (channel=email; WhatsApp available via API), delivery status shown in UI.
-- Tip: If tokens get stale, clear browser localStorage and save again (password resets to `changeme` on save).
+### Option 1: Docker (Recommended)
 
----
-
-### Running the Stack
 ```bash
-# Build & start
-docker compose -f docker/docker-compose.yml up --build -d
+# 1. Clone and navigate
+cd ffz-ai-update
 
-# Apply migrations (run manually when models change)
-docker compose -f docker/docker-compose.yml exec api alembic upgrade head
+# 2. Create .env file (see Environment Variables below)
+cp .env.example .env
+# Edit .env with your keys
 
-# Restart (clears schema guard, reloads scheduler)
-docker compose -f docker/docker-compose.yml restart api
+# 3. Start services
+docker-compose -f docker/docker-compose.yml up --build -d
 
-# Logs
-docker compose -f docker/docker-compose.yml logs -f api
-```
-- Admin: http://localhost:8000/admin
-- Health: http://localhost:8000/health (scheduler + DB readiness)
+# 4. Apply migrations
+docker-compose -f docker/docker-compose.yml exec api alembic upgrade head
 
----
-
-### Scheduler & Cron
-- Auto-registered on startup; default: Mondays 09:00 Europe/Paris.
-- Override cadence: `FFZ_SCHEDULER_INTERVAL_MINUTES=<int>`.
-- Manual run: `docker compose -f docker/docker-compose.yml exec api python -m app.scheduler.weekly`
-- Current behavior: generates reports for active subscribers; delivery remains operator-triggered via `/news/send_latest` (or extend scheduler to auto-send).
-
----
-
-### Environment (.env)
-```env
-TZ=Europe/Paris
-DATABASE_URL=sqlite+aiosqlite:////app/ffz.db
-SECRET_KEY=<random>
-
-MISTRAL_API_KEY=...
-MISTRAL_MODEL=mistral-small-latest
-OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-4o-mini
-LLM_PROVIDER=mistral
-
-WHATSAPP_PROVIDER=callmebot
-WA_PHONE=+33600000000
-WA_API_KEY=<callmebot-token>
-WA_SENDER_NAME=FFZ-Agent
-
-MAILEROO_API_KEY=...
-MAILEROO_DEFAULT_FROM=no-reply@xxxx.maileroo.org
-MAILEROO_FROM_NAME=Football Fan Zone
+# 5. Access the app
+# Frontend: http://localhost:8000
+# Admin: http://localhost:8000/admin
+# Health: http://localhost:8000/health
 ```
 
----
+### Option 2: Local Development
 
-### Repo Map (high value)
-| Path | Purpose |
-| --- | --- |
-| `app/api/admin_page.py` | Serves admin UI HTML and `/admin/user` upsert endpoint. |
-| `app/static/admin.js` | Admin UX (save user/leagues, auto-login, generate/send actions). |
-| `app/news/llm_generator.py` | LLM calls (Mistral/OpenAI), JSON parsing, provider order. |
-| `app/services/formatter.py` | WhatsApp chunks + HTML/plain email bodies with fan summary. |
-| `app/services/email_sender.py` | Maileroo integration. |
-| `app/services/whatsapp_sender.py` | CallMeBot integration + chunking. |
-| `app/services/quality_guard.py` | Validates/repairs LLM output; deterministic fallback. |
-| `app/scheduler/jobs.py` | Registers weekly cron/interval jobs. |
-| `migrations/` | Alembic migrations (run manually). |
-
----
-
-### Tests
 ```bash
-# inside Docker
-docker compose -f docker/docker-compose.yml exec api python -m pytest -q
-
-# or locally
+# 1. Install dependencies
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python -m pytest -q
+
+# 2. Setup PostgreSQL
+# Create database 'ffz_db' with user 'postgres:postgres'
+python create_db.py
+
+# 3. Apply migrations
+python -m alembic upgrade head
+
+# 4. Run the app
+python -m uvicorn app.main:app --reload
+
+# Access: http://127.0.0.1:8000
 ```
-Key: `tests/test_send_latest.py` (delivery paths), `tests/scheduler/test_weekly_scheduler.py`.
 
 ---
 
-### Troubleshooting
-- Schema 503: `docker compose -f docker/docker-compose.yml exec api alembic upgrade head`, then restart API.
-- 401 after save in admin: save again to reset password to `changeme` and refresh token; or clear localStorage.
-- Mistral 429 / OpenAI errors: provider falls back; switch model/provider or throttle.
-- WhatsApp skipped: ensure `WA_PHONE`/`WA_API_KEY` and CallMeBot registration.
-- Maileroo skipped: check `MAILEROO_*` vars; logs show reference IDs on success.
+## 📋 Stack at a Glance
+
+| Component | Technology |
+|-----------|-----------|
+| **Backend** | FastAPI (async) |
+| **Database** | PostgreSQL 15 + Alembic migrations |
+| **Frontend** | Vue 3 SPA + Tailwind CSS |
+| **AI** | OpenAI GPT-4o (text + vision) |
+| **Scraping** | httpx + BeautifulSoup + Playwright |
+| **Email** | Maileroo |
+| **Scheduler** | APScheduler (cron/interval jobs) |
+| **Deployment** | Docker + docker-compose |
 
 ---
 
-### Agentic Notes
-Data agent (scraper/normalizer) → Reasoning agent (LLM + guard) → Delivery agents (WhatsApp/Maileroo) → Orchestrator (scheduler/admin). Each stage is decoupled so failures in one fall back or retry without blocking the others.
+## 🏗️ Architecture
+
+### Agentic Pipeline
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────┐
+│   Scraper   │────▶│   Context    │────▶│     LLM     │────▶│ Delivery │
+│   Agent     │     │   Builder    │     │   Agent     │     │  Agent   │
+└─────────────┘     └──────────────┘     └─────────────┘     └──────────┘
+      │                    │                     │                  │
+   ESPN/BBC          Match Facts          GPT-4o Report        Email/SMS
+  Flashscore         + Stats              Multi-lang          (Future)
+                                          Multi-tone
+```
+
+**Flow:**
+1. **Scraper Agent**: Fetches match data from ESPN/Flashscore, uses Playwright Vision for advanced stats
+2. **Context Builder**: Structures data (recent matches, form, league position)
+3. **LLM Agent**: GPT-4o generates personalized report in user's language/tone
+4. **Delivery Agent**: Sends via email (Maileroo), stores in DB for dashboard
+
+### Data Mutualization
+
+- **Scrape once per match**, not per user
+- Store normalized `Match` and `MatchFacts` in DB
+- Generate reports by reading from DB (no re-scraping)
+- **Cost optimization**: ~few cents per user/month
+
+---
+
+## 🎯 Key Features
+
+### ✅ Implemented (Phases 1-4)
+
+- **Landing Page**: Hero, features, pricing, FAQ
+- **Auth & Onboarding**: Email verification, multi-step wizard (language, team, tone)
+- **Data Pipeline**: 
+  - Mutualized scraping (ESPN for matches, Flashscore Vision for stats)
+  - Scheduled jobs (daily league scrape, hourly match facts)
+- **Report Generation**:
+  - Multi-language (FR/EN/ES)
+  - 4 tones (fan/neutral/analytic/bettor)
+  - Structured sections (This Week, Stats, Key Players, What's Next)
+  - Interpretation over raw stats
+
+### 🚧 In Progress (Phase 5)
+
+- Weekly scheduling & email delivery
+- Report archives
+- Billing & trial logic (Stripe)
+
+---
+
+## 📁 Project Structure
+
+```
+ffz-ai-update/
+├── app/
+│   ├── api/              # API endpoints
+│   │   ├── reports.py    # Report generation & retrieval
+│   │   ├── onboarding.py # User onboarding flow
+│   │   └── ...
+│   ├── models/           # SQLAlchemy models
+│   │   ├── match.py      # Match & MatchFacts
+│   │   ├── report.py     # Generated reports
+│   │   └── user.py       # User & Subscription
+│   ├── services/         # Business logic
+│   │   ├── report_generator.py    # Main report orchestration
+│   │   ├── llm_prompts.py         # Multi-language prompts
+│   │   ├── context_builder.py     # Data fetching
+│   │   ├── scraper_service.py     # Scraping orchestration
+│   │   └── email_sender.py        # Maileroo integration
+│   ├── data/             # Data fetching & extraction
+│   │   ├── scraper.py    # ESPN scraping
+│   │   └── extractor/
+│   │       └── vision.py # Playwright Vision for Flashscore
+│   ├── scheduler/        # Scheduled jobs
+│   │   ├── jobs.py       # Job registration
+│   │   └── scraping_jobs.py  # Scraping jobs
+│   ├── static/           # Frontend (Vue SPA)
+│   │   ├── js/
+│   │   │   ├── app.js    # Main Vue app
+│   │   │   └── components/
+│   │   │       ├── Landing.js
+│   │   │       ├── Dashboard.js
+│   │   │       └── Onboarding.js
+│   │   └── index.html
+│   └── main.py           # FastAPI app entry
+├── migrations/           # Alembic migrations
+├── docker/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+├── .env                  # Environment variables
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## 🔧 Environment Variables
+
+Create a `.env` file in the root directory:
+
+```ini
+# Database (Docker uses postgres service, local uses localhost)
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/ffz_db
+
+# Public URL (for email verification links)
+PUBLIC_URL=http://127.0.0.1:8000
+
+# OpenAI (REQUIRED for report generation)
+OPENAI_API_KEY=sk-...
+
+# Maileroo (for email delivery)
+MAILEROO_API_KEY=...
+MAILEROO_DEFAULT_FROM=no-reply@yourdomain.maileroo.org
+MAILEROO_FROM_NAME=Football Fan Zone
+
+# Security
+SECRET_KEY=your-secret-key-here
+
+# Optional
+TZ=Europe/Paris
+ECHO_SQL=false
+```
+
+---
+
+## 🎮 Usage
+
+### 1. Register & Onboard
+
+1. Go to `http://localhost:8000`
+2. Click "Get Started" → Register
+3. Complete onboarding:
+   - Choose language (FR/EN/ES)
+   - Select favorite team & leagues
+   - Pick report tone (fan/neutral/analytic/bettor)
+
+### 2. Generate Report
+
+**Via API:**
+```bash
+# Login
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"yourpassword"}'
+
+# Generate report
+curl -X POST http://localhost:8000/api/reports/generate \
+  -H "Authorization: Bearer <token>"
+
+# Get latest report
+curl http://localhost:8000/api/reports/latest \
+  -H "Authorization: Bearer <token>"
+```
+
+**Via Dashboard:**
+- Navigate to Reports tab
+- Click "Generate New Report"
+
+### 3. Admin Console
+
+Access: `http://localhost:8000/admin`
+
+Features:
+- View all users
+- Trigger scraping jobs
+- Monitor system health
+
+---
+
+## 🔄 Scheduler & Jobs
+
+### Automatic Jobs
+
+- **Daily League Scrape** (02:00 AM): Fetches match schedules for all leagues
+- **Hourly Match Facts** (every hour): Scrapes stats for recently finished matches
+- **Weekly Reports** (Coming in Phase 5): Generates and sends reports
+
+### Manual Triggers
+
+```bash
+# Docker
+docker-compose -f docker/docker-compose.yml exec api python -m app.scheduler.weekly
+
+# Local
+python -m app.scheduler.weekly
+```
+
+---
+
+## 🧪 Testing
+
+### Run Tests
+
+```bash
+# Docker
+docker-compose -f docker/docker-compose.yml exec api python -m pytest -v
+
+# Local
+python -m pytest -v
+```
+
+### Manual Testing
+
+1. **Scraper Test**:
+   ```bash
+   python test_scraper.py
+   ```
+
+2. **Report Generation**:
+   - Requires: User with subscriptions + match data in DB
+   - Call `POST /api/reports/generate`
+
+---
+
+## 🐳 Docker Commands
+
+```bash
+# Start services
+docker-compose -f docker/docker-compose.yml up -d
+
+# View logs
+docker-compose -f docker/docker-compose.yml logs -f api
+
+# Restart
+docker-compose -f docker/docker-compose.yml restart api
+
+# Stop
+docker-compose -f docker/docker-compose.yml down
+
+# Rebuild
+docker-compose -f docker/docker-compose.yml up --build -d
+
+# Run migrations
+docker-compose -f docker/docker-compose.yml exec api alembic upgrade head
+
+# Access shell
+docker-compose -f docker/docker-compose.yml exec api bash
+```
+
+---
+
+## 🔍 Troubleshooting
+
+### Docker Won't Start
+
+**Issue**: `unable to get image 'docker-api'`
+
+**Solution**: Make sure Docker Desktop is running. If still failing, try:
+```bash
+docker-compose -f docker/docker-compose.yml down -v
+docker-compose -f docker/docker-compose.yml up --build -d
+```
+
+### Profile Update Error
+
+**Issue**: `InvalidRequestError: Instance '<User>' is not persistent`
+
+**Solution**: Fixed in latest version. Make sure you've pulled latest code.
+
+### Verification Email Shows localhost
+
+**Issue**: Email contains `http://localhost:8000/verify?token=...`
+
+**Solution**: Set `PUBLIC_URL` in `.env`:
+```ini
+PUBLIC_URL=https://yourdomain.com  # Production
+PUBLIC_URL=http://127.0.0.1:8000   # Local testing
+```
+
+### No Reports Generated
+
+**Checklist**:
+1. User has active subscriptions? (`/api/user/profile`)
+2. Match data exists in DB? (Run scraper: `python test_scraper.py`)
+3. `OPENAI_API_KEY` is set in `.env`?
+4. Check logs for errors
+
+### Database Migration Issues
+
+```bash
+# Check current revision
+docker-compose -f docker/docker-compose.yml exec api alembic current
+
+# Generate new migration
+docker-compose -f docker/docker-compose.yml exec api alembic revision --autogenerate -m "description"
+
+# Apply migrations
+docker-compose -f docker/docker-compose.yml exec api alembic upgrade head
+```
+
+---
+
+## 📊 Roadmap
+
+### ✅ Phase 0-4 (Complete)
+- PostgreSQL migration
+- Landing & onboarding
+- Data pipeline (scrapers + vision)
+- Report generation (multi-language, multi-tone)
+
+### 🚧 Phase 5 (In Progress)
+- Weekly scheduling
+- Email delivery automation
+- Report archives
+
+### 📅 Phase 6 (Planned)
+- Stripe billing integration
+- 15-day trial logic
+- Subscription management
+
+---
+
+## 🤝 Contributing
+
+This is a private SaaS project. For questions or issues, contact the development team.
+
+---
+
+## 📝 License
+
+Proprietary - All rights reserved
+
+---
+
+## 🆘 Support
+
+- **Health Check**: `http://localhost:8000/health`
+- **API Docs**: `http://localhost:8000/docs`
+- **Logs**: `docker-compose -f docker/docker-compose.yml logs -f api`
+
+---
+
+**Built with ❤️ for football fans worldwide**

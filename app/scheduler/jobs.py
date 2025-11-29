@@ -10,6 +10,8 @@ from sqlalchemy.future import select
 from app.models.db import AsyncSessionLocal
 from app.models.user import User
 from app.services.generation_service import generate_and_store_weekly_report
+from app.scheduler.scraping_jobs import job_scrape_all_leagues, job_scrape_recent_matches
+from app.scheduler.report_jobs import job_generate_weekly_reports
 
 logger = logging.getLogger(__name__)
 
@@ -100,3 +102,41 @@ def schedule_jobs(scheduler: AsyncIOScheduler):
         replace_existing=True,
     )
     logger.info("Scheduler configured for weekly run: Mondays 09:00 Europe/Paris")
+
+    # Daily scraping of all leagues (e.g., at 02:00 AM)
+    scheduler.add_job(
+        job_scrape_all_leagues,
+        trigger="cron",
+        hour=2,
+        minute=0,
+        timezone=paris_tz,
+        id="scrape-leagues-daily",
+        replace_existing=True,
+    )
+    
+    # Hourly scraping of recent match facts
+    scheduler.add_job(
+        job_scrape_recent_matches,
+        trigger="interval",
+        minutes=60,
+        id="scrape-facts-hourly",
+        replace_existing=True,
+    )
+    logger.info("Registered scraping jobs: daily league scrape and hourly facts scrape")
+    
+    # Weekly report generation and delivery (Mondays 09:00)
+    report_day = int(os.getenv("REPORT_SCHEDULE_DAY", "0"))  # 0 = Monday
+    report_hour = int(os.getenv("REPORT_SCHEDULE_HOUR", "9"))
+    report_minute = int(os.getenv("REPORT_SCHEDULE_MINUTE", "0"))
+    
+    scheduler.add_job(
+        job_generate_weekly_reports,
+        trigger="cron",
+        day_of_week=report_day,
+        hour=report_hour,
+        minute=report_minute,
+        timezone=paris_tz,
+        id="weekly-reports",
+        replace_existing=True,
+    )
+    logger.info(f"Registered weekly report job: day={report_day}, hour={report_hour}:{report_minute:02d} {paris_tz}")

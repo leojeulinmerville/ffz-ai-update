@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Dashboard Debug</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <h1>League Test</h1>
+        <p>Available Leagues: {{ availableLeagues.length }}</p>
+        <ul>
+            <li v-for="league in availableLeagues" :key="league.code">
+                {{ league.name }} ({{ league.code }})
+            </li>
+        </ul>
+        <button @click="fetchLeagues">Fetch Leagues</button>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    availableLeagues: []
+                }
+            },
+            async mounted() {
+                await this.fetchLeagues();
+            },
+            methods: {
+                async fetchLeagues() {
+                    try {
+                        const res = await fetch('/meta/leagues');
+                        if (res.ok) {
+                            const data = await res.json();
+                            console.log('Response data:', data);
+                            this.availableLeagues = data.leagues || [];
+                            console.log('Available leagues:', this.availableLeagues);
+                        } else {
+                            console.error('Failed to fetch leagues:', res.status);
+                        }
+                    } catch (e) {
+                        console.error("Failed to load leagues", e);
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

@@ -1,3 +1,5 @@
+console.log('🚀 Dashboard.js LOADED - Version 2024-11-24 15:57');
+
 export default {
     data() {
         return {
@@ -23,13 +25,18 @@ export default {
                 team: '',
                 frequency: 'weekly'
             },
-            availableLeagues: []
+            availableLeagues: [],
+            allTeams: [],
+            billingStatus: null  // NEW: Track trial/subscription status
         }
     },
     async mounted() {
         await this.fetchProfile();
+        await this.fetchBillingStatus();  // NEW: Fetch billing status
         await this.fetchLatestReport();
         await this.fetchLeagues();
+        // Fetch teams for all leagues to populate the datalist (non-blocking)
+        this.fetchAllTeams().catch(err => console.error('Failed to fetch teams:', err));
     },
     methods: {
         async fetchProfile() {
@@ -55,15 +62,29 @@ export default {
                 console.error("Failed to fetch profile", e);
             }
         },
+        async fetchBillingStatus() {
+            try {
+                const token = localStorage.getItem('ffz_token');
+                const res = await fetch('/api/billing/status', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    this.billingStatus = await res.json();
+                }
+            } catch (e) {
+                console.error("Failed to fetch billing status", e);
+            }
+        },
         async fetchLatestReport() {
             this.loadingReport = true;
             try {
                 const token = localStorage.getItem('ffz_token');
-                const res = await fetch('/news/latest', {
+                const res = await fetch('/api/reports/latest', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
-                    this.latestReport = await res.json();
+                    const data = await res.json();
+                    this.latestReport = data.data; // New API returns {status, data}
                 }
             } catch (e) {
                 console.error("No latest report found");
@@ -75,22 +96,46 @@ export default {
             try {
                 const res = await fetch('/meta/leagues');
                 if (res.ok) {
-                    this.availableLeagues = await res.json();
+                    const data = await res.json();
+                    console.log('[DEBUG] Leagues API response:', data);
+                    this.availableLeagues = data.leagues || [];
+                    console.log('[DEBUG] availableLeagues set to:', this.availableLeagues);
+                } else {
+                    console.error('[DEBUG] Leagues fetch failed with status:', res.status);
                 }
             } catch (e) {
                 console.error("Failed to load leagues", e);
             }
         },
+        async fetchAllTeams() {
+            const teams = new Set();
+            for (const league of this.availableLeagues) {
+                try {
+                    const res = await fetch(`/meta/leagues/${league.code}/teams`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        data.teams?.forEach(t => teams.add(t.name));
+                    }
+                } catch (e) {
+                    console.error(`Failed to load teams for ${league.code}`, e);
+                }
+            }
+            this.allTeams = Array.from(teams).sort();
+        },
         async generateReport() {
             this.loadingReport = true;
             try {
                 const token = localStorage.getItem('ffz_token');
-                const res = await fetch('/news/generate', {
+                const res = await fetch('/api/reports/generate', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
+                    alert('✓ Rapport généré et envoyé par email !');
                     await this.fetchLatestReport();
+                } else {
+                    const error = await res.json();
+                    alert(`Erreur: ${error.detail || 'Échec de la génération'}`);
                 }
             } catch (e) {
                 alert("Failed to generate report");
@@ -170,27 +215,15 @@ export default {
                 }
             } catch (e) {
                 alert("Erreur lors de la suppression");
-            }
-        }
-    },
-    template: `
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-            <!-- Header with Tabs -->
-            <div class="mb-8">
-                <h2 class="text-2xl font-bold text-gray-900 mb-4">Tableau de bord</h2>
-                <div class="border-b border-gray-200">
-                    <nav class="-mb-px flex space-x-8">
-                        <button @click="activeTab = 'reports'" :class="activeTab === 'reports' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                            Rapports
-                        </button>
-                        <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                            Paramètres
-                        </button>
-                    </nav>
-                </div>
-            </div>
+                        </button >
+                    <button @click="activeTab = 'settings'" : class="activeTab === 'settings' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" >
+                        Paramètres
+                        </button >
+                    </nav >
+                </div >
+            </div >
 
-            <!-- Reports Tab -->
+            < !--Reports Tab-- >
             <div v-if="activeTab === 'reports'">
                 <div class="flex justify-end mb-4">
                     <button @click="generateReport" :disabled="loadingReport" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
@@ -203,7 +236,7 @@ export default {
                     <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
                         <h3 class="text-lg font-medium text-gray-900">Dernier rapport</h3>
                         <p v-if="latestReport" class="mt-1 text-sm text-gray-500">
-                            Généré le {{ new Date(latestReport.created_at).toLocaleDateString('fr-FR') }}
+                            Généré le {{ latestReport.generated_at ? new Date(latestReport.generated_at).toLocaleDateString('fr-FR') : 'Date inconnue' }}
                         </p>
                     </div>
                     <div class="px-4 py-5 sm:p-6">
@@ -214,73 +247,67 @@ export default {
                             Chargement...
                         </div>
                         
-                        <div v-if="latestReport" class="space-y-8">
-                            <div v-for="article in latestReport.report.articles" :key="article.league_code" class="border rounded-lg p-6 bg-gray-50">
-                                <h4 class="text-xl font-bold text-indigo-900 mb-2">{{ article.headline }}</h4>
-                                <div class="prose max-w-none text-gray-700 whitespace-pre-line mb-4">
-                                    {{ article.narrative }}
-                                </div>
-                                
-                                <div v-if="article.fan_spotlight" class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-                                    <h3 class="text-sm font-medium text-yellow-800 mb-2">Focus club</h3>
-                                    <div class="text-sm text-yellow-700 space-y-2">
-                                        <p v-if="article.fan_spotlight.analysis"><strong>Analyse :</strong> {{ article.fan_spotlight.analysis }}</p>
-                                        <p v-if="article.fan_spotlight.next_match_preview"><strong>Prochain match :</strong> {{ article.fan_spotlight.next_match_preview }}</p>
-                                        <p v-if="article.fan_spotlight.tactical_notes"><strong>Tactique :</strong> {{ article.fan_spotlight.tactical_notes }}</p>
-                                    </div>
-                                </div>
-
-                                <div v-if="article.watchlist && article.watchlist.length" class="bg-blue-50 rounded-md p-4">
-                                    <h5 class="text-sm font-medium text-blue-800 mb-2">À surveiller</h5>
-                                    <ul class="list-disc pl-5 text-sm text-blue-700">
-                                        <li v-for="item in article.watchlist" :key="item">{{ item }}</li>
-                                    </ul>
+                        <div v-if="latestReport && latestReport.report" class="space-y-8">
+                            <div v-if="latestReport.report.headline" class="text-center py-4 bg-indigo-50 rounded-lg">
+                                <h2 class="text-2xl font-bold text-indigo-900">{{ latestReport.report.headline }}</h2>
+                            </div>
+                            
+                            <div v-for="(section, idx) in latestReport.report.sections" :key="idx" class="border rounded-lg p-6 bg-gray-50">
+                                <h4 class="text-xl font-bold text-indigo-900 mb-2">{{ section.title }}</h4>
+                                <div class="prose max-w-none text-gray-700 whitespace-pre-line">
+                                    {{ section.content }}
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
+                </div >
+            </div >
 
-            <!-- Settings Tab -->
-            <div v-if="activeTab === 'settings'" class="space-y-6">
-                <!-- Profile Settings -->
-                <div class="bg-white shadow sm:rounded-lg">
-                    <div class="px-4 py-5 sm:p-6">
-                        <h3 class="text-lg font-medium text-gray-900 mb-4">Profil</h3>
-                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Prénom</label>
-                                <input v-model="settingsForm.first_name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            < !--Settings Tab-- >
+                    <div v-if="activeTab === 'settings'" class="space-y-6">
+                        <!-- Profile Settings -->
+                        <div class="bg-white shadow sm:rounded-lg">
+                            <div class="px-4 py-5 sm:p-6">
+                                <h3 class="text-lg font-medium text-gray-900 mb-4">Profil</h3>
+                                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Prénom</label>
+                                        <input v-model="settingsForm.first_name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Nom</label>
+                                        <input v-model="settingsForm.last_name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Langue des rapports</label>
+                                        <select v-model="settingsForm.language" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                            <option v-for="lang in availableLanguages" :key="lang.code" :value="lang.code">{{ lang.name }}</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Équipe préférée</label>
+                                    <div class="mt-1 relative rounded-md shadow-sm">
+                                        <input v-model="settingsForm.favorite_team" type="text" list="teams-list" class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Rechercher une équipe...">
+                                            <datalist id="teams-list">
+                                                <option v-for="team in allTeams" :key="team" :value="team" />
+                                            </datalist>
+                                    </div>
+                                    <p class="mt-1 text-xs text-gray-500">Sélectionnez votre équipe de cœur pour des rapports personnalisés.</p>
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700">Téléphone (WhatsApp)</label>
+                                    <input v-model="settingsForm.phone_number" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="+33...">
+                                </div>
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Nom</label>
-                                <input v-model="settingsForm.last_name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Langue des rapports</label>
-                                <select v-model="settingsForm.language" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                                    <option v-for="lang in availableLanguages" :key="lang.code" :value="lang.code">{{ lang.name }}</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Équipe préférée</label>
-                                <input v-model="settingsForm.favorite_team" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="ex: Bologna">
-                            </div>
-                            <div class="sm:col-span-2">
-                                <label class="block text-sm font-medium text-gray-700">Téléphone (WhatsApp)</label>
-                                <input v-model="settingsForm.phone_number" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="+33...">
-                            </div>
-                        </div>
-                        <div class="mt-4">
-                            <button @click="saveSettings" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                            <div class="mt-4">
+                                <button @click="saveSettings" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                                 Enregistrer les modifications
                             </button>
                         </div>
                     </div>
-                </div>
+                </div >
 
-                <!-- Subscriptions -->
+                < !--Subscriptions -->
                 <div class="bg-white shadow sm:rounded-lg">
                     <div class="px-4 py-5 sm:p-6">
                         <h3 class="text-lg font-medium text-gray-900 mb-4">Abonnements</h3>
@@ -301,36 +328,36 @@ export default {
                             </div>
                         </div>
 
-                        <!-- Add New Subscription -->
-                        <div class="border-t pt-4">
-                            <h4 class="text-sm font-medium text-gray-700 mb-2">Ajouter un abonnement :</h4>
-                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                                <select v-model="newSubscription.league" class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                                    <option value="">Choisir une ligue...</option>
-                                    <option v-for="league in availableLeagues" :key="league.code" :value="league.code">
-                                        {{ league.name }}
-                                    </option>
-                                </select>
-                                <input v-model="newSubscription.team" type="text" placeholder="Équipe (optionnel)" class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                                <button @click="addSubscription" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                                    Ajouter
-                                </button>
-                            </div>
-                        </div>
+                        <!--Add New Subscription-- >
+                    <div class="border-t pt-4">
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">Ajouter un abonnement :</h4>
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                            <select v-model="newSubscription.league" class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <option value="">Choisir une ligue...</option>
+                                <option v-for="league in availableLeagues" :key="league.code" :value="league.code">
+                                {{ league.name }}
+                            </option>
+                        </select>
+                        <input v-model="newSubscription.team" type="text" placeholder="Équipe (optionnel)" class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <button @click="addSubscription" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                            Ajouter
+                        </button>
                     </div>
-                </div>
+                        </div >
+                    </div >
+                </div >
 
-                <!-- Danger Zone -->
-                <div class="bg-white shadow sm:rounded-lg border-2 border-red-200">
-                    <div class="px-4 py-5 sm:p-6">
-                        <h3 class="text-lg font-medium text-red-900 mb-2">Zone de danger</h3>
-                        <p class="text-sm text-gray-500 mb-4">La suppression de votre compte est irréversible.</p>
-                        <button @click="deleteAccount" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700">
+                < !--Danger Zone-- >
+                    <div class="bg-white shadow sm:rounded-lg border-2 border-red-200">
+                        <div class="px-4 py-5 sm:p-6">
+                            <h3 class="text-lg font-medium text-red-900 mb-2">Zone de danger</h3>
+                            <p class="text-sm text-gray-500 mb-4">La suppression de votre compte est irréversible.</p>
+                            <button @click="deleteAccount" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700">
                             Supprimer mon compte
                         </button>
                     </div>
-                </div>
-            </div>
-        </div>
-    `
+                </div >
+            </div >
+        </div >
+                    `
 }

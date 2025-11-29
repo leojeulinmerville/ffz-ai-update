@@ -23,7 +23,7 @@ target_metadata = Base.metadata
 
 def run_migrations_offline():
     context.configure(
-        url=DATABASE_URL.replace("+aiosqlite", ""),  # alembic veut le driver sync
+        url=DATABASE_URL.replace("+asyncpg", ""),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -34,7 +34,7 @@ def run_migrations_offline():
 
 def run_migrations_online():
     connectable = create_engine(
-        DATABASE_URL.replace("+aiosqlite", ""), poolclass=pool.NullPool
+        DATABASE_URL.replace("+asyncpg", ""), poolclass=pool.NullPool
     )
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)

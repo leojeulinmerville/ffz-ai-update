@@ -102,3 +102,56 @@ async def send_verification_email(email: str, token: str) -> None:
         logger.info("Verification email sent to %s", email)
     except Exception as exc:
         logger.error("Failed to send verification email: %s", exc)
+
+
+async def send_report_email(report_content: dict, user_email: str, user_name: str = None) -> dict:
+    """
+    Send a generated report via email.
+    
+    Args:
+        report_content: The report payload from report_generator
+        user_email: Recipient email
+        user_name: Optional user first name
+        
+    Returns:
+        Dict with status, reference_id, sent_at
+    """
+    if not _MAILEROO_CLIENT or not _MAILEROO_FROM:
+        logger.warning("Maileroo not configured, skipping report email to %s", user_email)
+        return {"status": "skipped", "detail": "Maileroo not configured"}
+    
+    try:
+        from app.services.report_formatter import format_report_email
+        
+        # Format email
+        formatted = format_report_email(report_content, user_email, user_name)
+        
+        # Prepare email data
+        sender = EmailAddress(_MAILEROO_FROM, _MAILEROO_FROM_NAME)
+        recipient = EmailAddress(user_email, user_name or user_email)
+        
+        data = {
+            "from": sender,
+            "to": [recipient],
+            "subject": formatted["subject"],
+            "html": formatted["html"],
+            "plain": formatted["plain"],
+            "tracking": True,
+        }
+        
+        # Send
+        reference_id = await _send_basic_email(data)
+        logger.info("Report email sent to %s, reference: %s", user_email, reference_id)
+        
+        return {
+            "status": "sent",
+            "reference_id": reference_id,
+            "sent_at": datetime.utcnow().isoformat(),
+        }
+        
+    except Exception as exc:
+        logger.exception("Failed to send report email to %s: %s", user_email, exc)
+        return {
+            "status": "failed",
+            "detail": str(exc)
+        }

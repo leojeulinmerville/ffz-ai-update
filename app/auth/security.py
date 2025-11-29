@@ -4,8 +4,8 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models.db import AsyncSessionLocal
 from app.models.user import User
+from app.database import get_db
 
 SECRET_KEY = os.getenv("SECRET_KEY", "devsecret")
 ALGORITHM = "HS256"
@@ -28,11 +28,6 @@ def decode_jwt(token: str):
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.PyJWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-# --- DB session dependency ---
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
 
 # --- Current user helper ---
 async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)):

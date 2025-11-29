@@ -2,22 +2,26 @@ from __future__ import annotations
 
 from typing import Generator
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import declarative_base
 
-DATABASE_URL = "sqlite:///./ffz.db"
+from app.config import DATABASE_URL
 
-# SQLite needs check_same_thread disabled when accessed from FastAPI threads.
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Create async engine
+engine = create_async_engine(DATABASE_URL, echo=False)
+
+# Create async session factory
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=False,
+)
 
 Base = declarative_base()
 
 
-def get_db() -> Generator:
-    """FastAPI dependency that yields a DB session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db() -> Generator:
+    """FastAPI dependency that yields an async DB session."""
+    async with AsyncSessionLocal() as session:
+        yield session

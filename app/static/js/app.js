@@ -1,8 +1,10 @@
 import Landing from './components/Landing.js';
 import Login from './components/Login.js';
 import Register from './components/Register.js';
-import Dashboard from './components/Dashboard.js';
+import Dashboard from './components/Dashboard.js?v=2';
 import Verify from './components/Verify.js';
+import Onboarding from './components/Onboarding.js';
+import Billing from './components/Billing.js';
 
 const { createApp, reactive } = Vue;
 const { createRouter, createWebHistory } = VueRouter;
@@ -39,14 +41,30 @@ const routes = [
     { path: '/login', component: Login },
     { path: '/register', component: Register },
     { path: '/verify', component: Verify },
-    { 
-        path: '/dashboard', 
+    {
+        path: '/onboarding',
+        component: Onboarding,
+        beforeEnter: (to, from, next) => {
+            if (!store.token) next('/login');
+            else next();
+        }
+    },
+    {
+        path: '/dashboard',
         component: Dashboard,
         beforeEnter: (to, from, next) => {
             if (!store.token) next('/login');
             else next();
         }
     },
+    {
+        path: '/billing',
+        component: Billing,
+        beforeEnter: (to, from, next) => {
+            if (!store.token) next('/login');
+            else next();
+        }
+    }
 ];
 
 const router = createRouter({
@@ -71,6 +89,7 @@ const App = {
                         <div class="flex items-center space-x-4">
                             <template v-if="store.user">
                                 <router-link to="/dashboard" class="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">Dashboard</router-link>
+                                <router-link to="/billing" class="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">💎 Abonnement</router-link>
                                 <button @click="store.logout()" class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium">Logout</button>
                             </template>
                             <template v-else>

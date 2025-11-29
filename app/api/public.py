@@ -39,7 +39,7 @@ async def register_user(
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Create user
+    # Create user with trial started
     new_user = User(
         email=payload.email.lower(),
         password_hash=hash_password(payload.password),
@@ -48,7 +48,9 @@ async def register_user(
         language=payload.language,
         favorite_team=payload.favorite_team,
         is_active=True,
-        is_verified=False  # Require verification
+        is_verified=False,  # Require verification
+        trial_started_at=datetime.now(timezone.utc),  # Start 15-day trial
+        subscription_status="trial"
     )
     db.add(new_user)
     await db.flush()
@@ -75,9 +77,10 @@ async def register_user(
 
 @router.post("/verify")
 async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
-    from app.auth.security import decode_jwt_token
+    from app.auth.security import decode_jwt
     
-    user_id = decode_jwt_token(token)
+    payload = decode_jwt(token)
+    user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
         

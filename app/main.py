@@ -22,6 +22,9 @@ from app.api.subscriptions import router as subs_router
 from app.api.user_profile import router as user_profile_router
 from app.auth.routes import router as auth_router
 from app.api.public import router as public_router
+from app.api.onboarding import router as onboarding_router
+from app.api.reports import router as reports_router
+from app.api.billing import router as billing_router
 from app.models.db import init_db, engine
 from app.scheduler.jobs import schedule_jobs
 
@@ -115,6 +118,7 @@ async def startup_event() -> None:
     logger.info("Scheduler started successfully")
 
 
+
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     if scheduler.running:
@@ -130,6 +134,9 @@ app.include_router(facts_router)
 app.include_router(scrape_router)
 app.include_router(public_router)
 app.include_router(user_profile_router)
+app.include_router(onboarding_router, prefix="/api")
+app.include_router(reports_router)
+app.include_router(billing_router)
 
 
 @app.get("/health")

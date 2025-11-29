@@ -353,6 +353,7 @@ def _normalize_event(event: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     return {
+        "id": event.get("id"),
         "utcDate": event.get("date"),
         "homeTeam": _team_payload(home),
         "awayTeam": _team_payload(away),

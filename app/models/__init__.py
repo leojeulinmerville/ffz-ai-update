@@ -1,4 +1,4 @@
-from . import fact, job, raw_page, snapshot, user, weekly_report  # noqa: F401
+from . import fact, job, raw_page, snapshot, user, weekly_report, match, report  # noqa: F401
 
 __all__ = [
     "user",
@@ -7,4 +7,6 @@ __all__ = [
     "fact",
     "snapshot",
     "job",
+    "match",
+    "report",
 ]
