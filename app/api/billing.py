@@ -20,16 +20,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 
+from pydantic import BaseModel
+
+
+class CheckoutRequest(BaseModel):
+    plan: str = "monthly"  # 'monthly' or 'yearly'
+    promo_code: str = None
+
+
 @router.post("/checkout")
 async def create_checkout(
+    request: CheckoutRequest = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Create a Stripe Checkout session for subscription.
     
+    Args:
+        plan: 'monthly' (€2.90/mo) or 'yearly' (€25/year Season Pass)
+        promo_code: Optional promo code (e.g., 'FFZ_FAN_CLUB')
+    
     Returns checkout URL for user to complete payment.
     """
+    plan = request.plan if request else "monthly"
+    promo_code = request.promo_code if request else None
+    
     try:
         # Create Stripe customer if doesn't exist
         if not user.stripe_customer_id:
@@ -44,13 +60,16 @@ async def create_checkout(
         # Create checkout session
         session = await stripe_service.create_checkout_session(
             customer_id=user.stripe_customer_id,
-            user_id=str(user.id)
+            user_id=str(user.id),
+            plan=plan,
+            promo_code=promo_code
         )
         
         return {
             "status": "success",
             "checkout_url": session["url"],
-            "session_id": session["session_id"]
+            "session_id": session["session_id"],
+            "plan": session["plan"]
         }
         
     except Exception as e:
@@ -92,9 +111,10 @@ async def get_billing_status(
     """
     Get current billing and subscription status.
     
-    Returns trial status, subscription status, and billing info.
+    Returns trial status, subscription status, billing info, and enforcement status.
     """
     from datetime import datetime, timezone, timedelta
+    from app.middleware.subscription_guard import is_billing_enforcement_enabled
     import os
     
     trial_days = int(os.getenv("TRIAL_DURATION_DAYS", "15"))
@@ -113,6 +133,12 @@ async def get_billing_status(
     if user.stripe_subscription_id:
         subscription_info = await stripe_service.get_subscription(user.stripe_subscription_id)
     
+    # Check enforcement status
+    enforcement_enabled = is_billing_enforcement_enabled()
+    
+    # Access is granted if enforcement is disabled OR user has active subscription
+    has_access = (not enforcement_enabled) or user.has_active_subscription()
+    
     return {
         "trial": {
             "active": trial_active,
@@ -125,7 +151,9 @@ async def get_billing_status(
             "stripe_subscription_id": user.stripe_subscription_id,
             "details": subscription_info
         },
-        "has_access": user.has_active_subscription()
+        "has_access": has_access,
+        "enforcement_enabled": enforcement_enabled,
+        "pricing": stripe_service.PRICING_INFO
     }
 
 

@@ -3,9 +3,10 @@ Stripe Service
 
 Handles all Stripe billing operations including:
 - Customer creation
-- Checkout sessions
+- Checkout sessions (monthly €2.90, yearly €25)
 - Subscription management
 - Webhook processing
+- Promo code support (e.g., FFZ_FAN_CLUB)
 """
 
 import os
@@ -19,9 +20,29 @@ logger = logging.getLogger(__name__)
 # Initialize Stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
-STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID")
+# Price IDs
+STRIPE_PRICE_ID_MONTHLY = os.getenv("STRIPE_PRICE_ID_MONTHLY")
+STRIPE_PRICE_ID_YEARLY = os.getenv("STRIPE_PRICE_ID_YEARLY")
+# Legacy fallback
+STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID") or STRIPE_PRICE_ID_MONTHLY
+
 STRIPE_SUCCESS_URL = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:8000/dashboard?session_id={CHECKOUT_SESSION_ID}")
 STRIPE_CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "http://localhost:8000/dashboard")
+
+
+def get_price_id(plan: str = "monthly") -> str:
+    """
+    Get the Stripe price ID for a given plan.
+    
+    Args:
+        plan: 'monthly' or 'yearly'
+        
+    Returns:
+        Stripe price ID
+    """
+    if plan == "yearly":
+        return STRIPE_PRICE_ID_YEARLY or STRIPE_PRICE_ID
+    return STRIPE_PRICE_ID_MONTHLY or STRIPE_PRICE_ID
 
 
 async def create_customer(email: str, name: Optional[str] = None, metadata: Optional[Dict] = None) -> str:
@@ -52,6 +73,8 @@ async def create_customer(email: str, name: Optional[str] = None, metadata: Opti
 async def create_checkout_session(
     customer_id: str,
     user_id: str,
+    plan: str = "monthly",
+    promo_code: Optional[str] = None,
     success_url: Optional[str] = None,
     cancel_url: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -61,6 +84,8 @@ async def create_checkout_session(
     Args:
         customer_id: Stripe customer ID
         user_id: Internal user ID
+        plan: 'monthly' (€2.90/mo) or 'yearly' (€25/year Season Pass)
+        promo_code: Optional promo/coupon code (e.g., 'FFZ_FAN_CLUB')
         success_url: Redirect URL on success
         cancel_url: Redirect URL on cancel
         
@@ -68,31 +93,43 @@ async def create_checkout_session(
         Dict with session ID and URL
     """
     try:
-        session = stripe.checkout.Session.create(
-            customer=customer_id,
-            payment_method_types=["card"],
-            line_items=[{
-                "price": STRIPE_PRICE_ID,
+        session_params = {
+            "customer": customer_id,
+            "payment_method_types": ["card"],
+            "line_items": [{
+                "price": get_price_id(plan),
                 "quantity": 1,
             }],
-            mode="subscription",
-            success_url=success_url or STRIPE_SUCCESS_URL,
-            cancel_url=cancel_url or STRIPE_CANCEL_URL,
-            metadata={
-                "user_id": user_id
+            "mode": "subscription",
+            "success_url": success_url or STRIPE_SUCCESS_URL,
+            "cancel_url": cancel_url or STRIPE_CANCEL_URL,
+            "metadata": {
+                "user_id": user_id,
+                "plan": plan
             },
-            subscription_data={
+            "subscription_data": {
                 "metadata": {
-                    "user_id": user_id
+                    "user_id": user_id,
+                    "plan": plan
                 }
             }
-        )
+        }
         
-        logger.info(f"Created checkout session: {session.id} for user {user_id}")
+        # Add promo code if provided
+        if promo_code:
+            session_params["allow_promotion_codes"] = True
+            # Note: For specific codes, you'd use discounts=[{"promotion_code": promo_code_id}]
+            # but allow_promotion_codes lets users enter any valid code
+            logger.info(f"Checkout session created with promo code support for user {user_id}")
+        
+        session = stripe.checkout.Session.create(**session_params)
+        
+        logger.info(f"Created checkout session: {session.id} for user {user_id}, plan: {plan}")
         
         return {
             "session_id": session.id,
-            "url": session.url
+            "url": session.url,
+            "plan": plan
         }
     except stripe.error.StripeError as e:
         logger.error(f"Failed to create checkout session: {e}")
@@ -160,7 +197,8 @@ async def get_subscription(subscription_id: str) -> Optional[Dict[str, Any]]:
             "status": subscription.status,
             "current_period_end": datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc),
             "cancel_at_period_end": subscription.cancel_at_period_end,
-            "customer": subscription.customer
+            "customer": subscription.customer,
+            "plan": subscription.metadata.get("plan", "monthly")
         }
     except stripe.error.StripeError as e:
         logger.error(f"Failed to retrieve subscription: {e}")
@@ -195,3 +233,21 @@ def construct_webhook_event(payload: bytes, sig_header: str) -> Optional[stripe.
     except stripe.error.SignatureVerificationError as e:
         logger.error(f"Invalid signature: {e}")
         return None
+
+
+# Pricing info for frontend
+PRICING_INFO = {
+    "monthly": {
+        "price": 2.90,
+        "currency": "EUR",
+        "interval": "month",
+        "display": "€2,90/mois"
+    },
+    "yearly": {
+        "price": 25.00,
+        "currency": "EUR",
+        "interval": "year", 
+        "display": "€25/an (Season Pass)",
+        "savings": "Économisez 28% !"
+    }
+}

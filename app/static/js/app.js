@@ -1,10 +1,10 @@
-import Landing from './components/Landing.js';
-import Login from './components/Login.js';
-import Register from './components/Register.js';
-import Dashboard from './components/Dashboard.js?v=2';
-import Verify from './components/Verify.js';
-import Onboarding from './components/Onboarding.js';
-import Billing from './components/Billing.js';
+import Landing from './components/Landing.js?v=2';
+import Login from './components/Login.js?v=2';
+import Register from './components/Register.js?v=2';
+import Dashboard from './components/Dashboard.js?v=4';
+import Verify from './components/Verify.js?v=2';
+import Onboarding from './components/Onboarding.js?v=2';
+import Billing from './components/Billing.js?v=2';
 
 const { createApp, reactive } = Vue;
 const { createRouter, createWebHistory } = VueRouter;
